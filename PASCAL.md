@@ -97,7 +97,7 @@ directory goes on PATH. On Ubuntu:
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y build-essential curl git python3 lsb-release
+sudo apt-get install -y build-essential curl git python3 python3-venv lsb-release
 curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
 echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-21 main" | sudo tee /etc/apt/sources.list.d/llvm-21.list
 sudo apt-get update

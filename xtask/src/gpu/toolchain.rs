@@ -83,12 +83,8 @@ pub fn install() -> Result<()> {
     let pins = PYTHON_PACKAGES.join("\n") + "\n";
     if fs::read_to_string(generators.join(STAMP)).ok().as_deref() != Some(pins.as_str()) {
         let python = generators.join(VENV_PYTHON);
-        if !python.is_file() {
-            exec(
-                Command::new(base_python()?)
-                    .args(["-m", "venv"])
-                    .arg(&generators),
-            )?;
+        if !has_pip(&python) {
+            environment(&generators)?;
         }
         exec(
             Command::new(&python)
@@ -109,6 +105,82 @@ pub fn install() -> Result<()> {
         fs::write(rust.join(STAMP), pins)?;
     }
     Ok(())
+}
+
+/// Whether `python` runs and imports pip. A virtual environment whose
+/// creation stopped at `ensurepip` has its Python and no pip.
+fn has_pip(python: &Path) -> bool {
+    python.is_file()
+        && Command::new(python)
+            .args(["-m", "pip", "--version"])
+            .output()
+            .is_ok_and(|output| output.status.success())
+}
+
+/// Makes the generators' virtual environment afresh, with pip, from
+/// [`base_python`]; where that Python makes none with pip, from the pinned
+/// standalone CPython. Debian and Ubuntu ship `ensurepip` apart from Python,
+/// in python3-venv, so their Python without it makes an environment that
+/// stops before pip and leaves its Python behind, which a later run would
+/// take as made.
+fn environment(generators: &Path) -> Result<()> {
+    let python = generators.join(VENV_PYTHON);
+    let base = base_python()?;
+    let made = make_environment(&base, generators)?;
+    if has_pip(&python) {
+        return Ok(());
+    }
+    // A Python named on purpose is not replaced.
+    if std::env::var_os("STELA_GPU_PYTHON").is_some() {
+        bail!(
+            "{} made no virtual environment with pip in {}: {made}",
+            base.display(),
+            generators.display()
+        );
+    }
+    let standalone = standalone_python()?;
+    ensure!(
+        standalone != base,
+        "the standalone CPython made no virtual environment with pip: {made}"
+    );
+    eprintln!(
+        "{} makes no virtual environment with pip (on Debian and Ubuntu that needs \
+         python3-venv); the generators use the pinned standalone CPython instead",
+        base.display()
+    );
+    let made = make_environment(&standalone, generators)?;
+    ensure!(
+        has_pip(&python),
+        "the standalone CPython made no virtual environment with pip in {}: {made}",
+        generators.display()
+    );
+    Ok(())
+}
+
+/// Runs `python -m venv` into `generators`, removed first, and answers what
+/// it printed when it failed (empty when it succeeded).
+fn make_environment(python: &Path, generators: &Path) -> Result<String> {
+    match fs::remove_dir_all(generators) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err(error).with_context(|| format!("cannot remove {}", generators.display()));
+        }
+        _ => {}
+    }
+    let output = Command::new(python)
+        .args(["-m", "venv"])
+        .arg(generators)
+        .output()
+        .with_context(|| format!("cannot start {}", python.display()))?;
+    if output.status.success() {
+        return Ok(String::new());
+    }
+    Ok(String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .chain(String::from_utf8_lossy(&output.stdout).lines())
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" "))
 }
 
 /// `STELA_GPU_PYTHON`, else the first Python 3.10 or newer on PATH, else the
@@ -350,6 +422,39 @@ mod tests {
             assert!(record.contains(flag), "{flag}: {record}");
         }
         assert!(!record.contains("-Dbuildtype=release"), "{record}");
+    }
+
+    /// A virtual environment whose creation stopped at `ensurepip`, as a
+    /// Debian or Ubuntu Python without python3-venv leaves one, has its
+    /// Python and no pip: it is not taken as made, and is made again with
+    /// pip.
+    #[test]
+    fn an_environment_without_pip_is_made_again() {
+        let scratch = tempfile::tempdir().unwrap();
+        let generators = scratch.path().join("generators");
+        let python = generators.join(VENV_PYTHON);
+        assert!(!has_pip(&python));
+        // No Python here: the fallback would fetch one.
+        let Some(base) = found_python().unwrap() else {
+            return;
+        };
+        let status = Command::new(&base)
+            .args(["-m", "venv", "--without-pip"])
+            .arg(&generators)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(python.is_file() && !has_pip(&python));
+        // Made again from this Python where it carries `ensurepip`'s pip;
+        // elsewhere the fallback would fetch the standalone CPython.
+        let carries_pip = Command::new(&base)
+            .args(["-c", "import ensurepip; ensurepip.version()"])
+            .status()
+            .is_ok_and(|status| status.success());
+        if carries_pip && std::env::var_os("STELA_GPU_PYTHON").is_none() {
+            environment(&generators).unwrap();
+            assert!(has_pip(&python));
+        }
     }
 
     /// A distribution's Clang that hardens by default, as Arch's turns on
