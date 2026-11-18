@@ -86,7 +86,7 @@ fails, and they would cost three more firmware handoff slots on every boot.
 You need what upstream Stela needs: [Rust](https://rustup.rs), git,
 Python 3.10 or newer, and LLVM 21, 22 or 23 with Clang, LLD and libclang.
 Upstream builds the boot image on Ubuntu 24.04 with LLVM 21 from
-apt.llvm.org; on Windows, use WSL2 with Ubuntu 24.04.
+apt.llvm.org. On Windows, see [On Windows](#on-windows) below.
 
 **`clang` itself must be on PATH**, or named by the `CLANG` variable. The
 first thing `cargo xtask` compiles is Mbed TLS, with `clang`, before its own
@@ -96,7 +96,8 @@ check of the toolchain runs. Without it the build stops at once with
 directory goes on PATH. On Ubuntu:
 
 ```sh
-sudo apt-get install -y curl git python3 lsb-release
+sudo apt-get update
+sudo apt-get install -y build-essential curl git python3 lsb-release
 curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
 echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-21 main" | sudo tee /etc/apt/sources.list.d/llvm-21.list
 sudo apt-get update
@@ -106,7 +107,16 @@ export PATH=/usr/lib/llvm-21/bin:$PATH
 clang --version
 ```
 
-`clang --version` must report version 21 or newer. Then build:
+`clang --version` must report version 21 or newer. Rust's own build scripts
+link with the system's C compiler, which `build-essential` provides. Install
+Rust if you have not:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
+```
+
+Then build:
 
 ```sh
 git clone -b claude/upbeat-sagan-3xwf43 https://github.com/Alwwex/stella_better
@@ -139,6 +149,72 @@ Boot the PC from the stick, then save the log on any computer:
 
 ```sh
 sudo ./target/release/stela log --output log.txt
+```
+
+### On Windows
+
+Upstream builds the boot image (`stela.efi`) only on Linux, and makes the
+Windows `stela.exe` by building the command on Windows with that image
+embedded. Do the same: build the image in WSL2, then build `stela.exe` on
+Windows and make the stick with it.
+
+**1. Build the boot image in WSL2.** In PowerShell run as administrator,
+install Ubuntu, then restart if asked and open Ubuntu from the Start menu to
+create its user:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+In the Ubuntu window, follow the Ubuntu steps above: the packages, Rust, the
+clone and `cargo xtask dist`. Clone into the Ubuntu home directory (`cd ~`
+first), not under `/mnt/c`, where the build is far slower. Then copy the
+image it prints last to Windows:
+
+```sh
+mkdir -p /mnt/c/stela
+cp target/boot/x86_64-unknown-uefi/release/stela-dist.efi /mnt/c/stela/stela.efi
+```
+
+If the build is killed partway, WSL ran out of memory: give it more in
+`%UserProfile%\.wslconfig` (`[wsl2]` then `memory=12GB`, for example), run
+`wsl --shutdown` in PowerShell, and build again.
+
+**2. Build `stela.exe` on Windows.** Install Rust with `rustup-init.exe`
+from [rustup.rs](https://rustup.rs), letting it install the Visual Studio C++
+build tools it asks for, then LLVM and Git:
+
+```powershell
+winget install -e --id LLVM.LLVM
+winget install -e --id Git.Git
+```
+
+In a new PowerShell window, clone the branch to a short path, put LLVM on
+PATH, name the image and build:
+
+```powershell
+git config --global core.longpaths true
+git clone --depth 1 -b claude/upbeat-sagan-3xwf43 https://github.com/Alwwex/stella_better C:\src\stella_better
+cd C:\src\stella_better
+rustup toolchain install
+$env:Path = "C:\Program Files\LLVM\bin;" + $env:Path
+$env:STELA_EFI = "C:\stela\stela.efi"
+cargo build --release --locked -p stela-cli
+```
+
+This writes `C:\src\stella_better\target\release\stela.exe` with your boot
+image and the Pascal firmware recipes in it.
+
+**3. Make the stick.** Open Terminal with Run as administrator and run:
+
+```powershell
+C:\src\stella_better\target\release\stela.exe
+```
+
+After booting the PC from the stick, save the log the same way:
+
+```powershell
+C:\src\stella_better\target\release\stela.exe log --output log.txt
 ```
 
 ## Reading the boot log
