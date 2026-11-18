@@ -93,7 +93,18 @@ impl MountLimits {
 pub const MANIFEST_PATH: &str = "EFI/stela/firmware/manifest.json";
 pub const DIRECTORY: &str = "EFI/stela/firmware";
 pub const MAX_MANIFEST_BYTES: usize = 128 * 1024;
+/// The images of a per-PC manifest `stela` writes: the mount contract's
+/// bound ([`MOUNT_CAPABILITY`], [`MountLimits::check_lengths`]), which only a
+/// revision changes.
 pub const MAX_IMAGES: usize = 64;
+/// The images the boot hands its engine at once: an older per-PC manifest's,
+/// the bundle files it reads for the PC's devices, and its own observations
+/// (SMBIOS and Intel Wi-Fi variables), as the handoff manifest the boot builds
+/// lists them and as its catalog holds them. Wider than [`MAX_IMAGES`]: the
+/// handoff is the boot's own, so no mount revision is needed, and a Pascal
+/// GPU's 20 nouveau files (a GSP-RM chip's are 3 to 7) beside a Realtek
+/// adapter's 25 and an Intel Wi-Fi adapter's left too few of 64.
+pub const MAX_HANDOFF_IMAGES: usize = 96;
 pub const MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 /// Room for a GSP-RM image per GPU family, beside every other driver's firmware.
 pub const MAX_TOTAL_BYTES: usize = 256 * 1024 * 1024;
@@ -150,12 +161,12 @@ fn bounded_images<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Imag
     impl<'de> Visitor<'de> for Images {
         type Value = Vec<Image<'de>>;
         fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "at most {MAX_IMAGES} firmware resources")
+            write!(f, "at most {MAX_HANDOFF_IMAGES} firmware resources")
         }
         fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
             let mut images = Vec::new();
             while let Some(image) = seq.next_element()? {
-                if images.len() == MAX_IMAGES {
+                if images.len() == MAX_HANDOFF_IMAGES {
                     return Err(de::Error::custom("too many firmware resources"));
                 }
                 images.push(image);
@@ -266,7 +277,7 @@ impl<'a> Manifest<'a> {
             .images
             .len()
             .checked_add(additional.len())
-            .is_none_or(|count| count > MAX_IMAGES)
+            .is_none_or(|count| count > MAX_HANDOFF_IMAGES)
             || additional
                 .iter()
                 .any(|resource| resource.bytes.len() > MAX_IMAGE_BYTES)

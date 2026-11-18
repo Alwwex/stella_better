@@ -208,7 +208,7 @@ pub fn read(root: &mut Directory) -> Result<Resources> {
     let observed =
         wifi.iter().map(|capture| capture.region.bytes).sum::<u64>() + smbios.region.bytes;
     let room = manifest::bundle::Room {
-        images: manifest::MAX_IMAGES.saturating_sub(older.clone().count() + wifi.len() + 1),
+        images: manifest::MAX_HANDOFF_IMAGES.saturating_sub(older.clone().count() + wifi.len() + 1),
         bytes: manifest::MAX_TOTAL_BYTES
             .saturating_sub(older.map(|image| image.length).sum::<usize>())
             .saturating_sub(observed as usize),
@@ -264,7 +264,7 @@ pub fn read(root: &mut Directory) -> Result<Resources> {
             }
         }
     };
-    if regions.len() > manifest::MAX_IMAGES {
+    if regions.len() > manifest::MAX_HANDOFF_IMAGES {
         return Err(refuse!(
             "host firmware resources exceed the handoff's slots"
         ));

@@ -11,7 +11,9 @@ use stela_drivers::firmware::{Catalog, Provider, Requirement, Target};
 use stela_drivers::net::wifi::intel::platform::{
     CapturedVariable, Observation, Observations, VARIABLE_DESCRIPTORS,
 };
-use stela_loader::host_firmware::{self as manifest, MAX_IMAGES, MAX_MANIFEST_BYTES, Manifest};
+use stela_loader::host_firmware::{
+    self as manifest, MAX_HANDOFF_IMAGES, MAX_MANIFEST_BYTES, Manifest,
+};
 
 pub mod smbios;
 pub mod wifi;
@@ -21,7 +23,7 @@ pub mod wifi;
 pub struct Resources {
     pub present: bool,
     pub manifest: Region,
-    pub images: [Region; MAX_IMAGES],
+    pub images: [Region; MAX_HANDOFF_IMAGES],
     pub count: usize,
     pub wifi: [wifi::Capture; VARIABLE_DESCRIPTORS.len()],
     pub smbios: smbios::Capture,
@@ -42,7 +44,7 @@ impl Resources {
             images: [Region {
                 physical: 0,
                 bytes: 0,
-            }; MAX_IMAGES],
+            }; MAX_HANDOFF_IMAGES],
             count: 0,
             bundle: Region {
                 physical: 0,
@@ -106,7 +108,7 @@ impl Resources {
         phase: Option<&'static str>,
         log: fn(fmt::Arguments<'_>),
     ) -> Result<Option<Arc<Catalog>>> {
-        if self.count > MAX_IMAGES
+        if self.count > MAX_HANDOFF_IMAGES
             || (!self.present && self.count != 0)
             || (self.present
                 && (self.manifest.bytes as usize > MAX_MANIFEST_BYTES || self.manifest.bytes == 0))
@@ -270,7 +272,7 @@ impl Resources {
                     .map_err(|_| refuse!("invalid SMBIOS identity"))
             })
             .transpose()?;
-        if self.count + additional.len() > MAX_IMAGES
+        if self.count + additional.len() > MAX_HANDOFF_IMAGES
             || bytes.iter().map(|b| b.len()).sum::<usize>()
                 + additional.iter().map(|r| r.bytes.len()).sum::<usize>()
                 > manifest::MAX_TOTAL_BYTES

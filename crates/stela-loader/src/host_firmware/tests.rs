@@ -159,7 +159,7 @@ fn additional_permanent_resources_share_one_validation_pass_without_copying() {
     );
     assert!(
         parsed
-            .catalog_with(&[&RAW], (0..MAX_IMAGES).map(|_| extra()).collect())
+            .catalog_with(&[&RAW], (0..MAX_HANDOFF_IMAGES).map(|_| extra()).collect())
             .is_err()
     );
     let mut corrupt = extra();
@@ -244,7 +244,7 @@ fn all_budgets_and_duplicate_bindings_are_checked_without_image_reads() {
         assert!(Manifest::parse(&manifest(vec![input])).is_err());
     }
     let mut images = Vec::new();
-    for n in 0..=MAX_IMAGES {
+    for n in 0..=MAX_HANDOFF_IMAGES {
         let mut input = image();
         input["path"] = json!(format!("file{n}.bin"));
         input["target"]["revision"] = json!(format!("rev{n}"));
