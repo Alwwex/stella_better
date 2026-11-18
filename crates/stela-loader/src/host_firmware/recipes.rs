@@ -1102,6 +1102,222 @@ pub const GSP: &[Recipe] = &[
     ),
 ];
 
+/// A file of linux-firmware's `nvidia` directory that nouveau loads on a
+/// Pascal chip ([`require_pascal`]), at the revision the GSP-RM files are
+/// pinned at and under the same `LICENCE.nvidia`.
+const fn pascal(member: &'static str, length: usize, sha256: &'static str) -> Recipe {
+    gsp(member, length, sha256)
+}
+
+/// Every file nouveau loads on a GP102, GP104, GP106 or GP107, each where
+/// linux-firmware's `WHENCE` puts it: the files the four chips share are
+/// GP102's (and GM200's two falcon bootloaders); each chip's graphics files
+/// of its own are in its directory ([`pascal_directory`]). GP104's
+/// `gpccs_inst.bin` is GP102's byte for byte, and GP102's `acr/bl.bin`
+/// Turing's, so the bundle stores each of those once.
+pub const PASCAL: &[Recipe] = &[
+    pascal(
+        "nvidia/gm200/gr/fecs_bl.bin",
+        576,
+        "58a14906a9ad69a141ea417481a9464928aa0e56cff98a35753d712a91029ac7",
+    ),
+    pascal(
+        "nvidia/gm200/gr/gpccs_bl.bin",
+        576,
+        "af1d42219e8184c10ab89fcd93607b36b2240c9c56e239ec797946890c8064c2",
+    ),
+    pascal(
+        "nvidia/gp102/acr/bl.bin",
+        1280,
+        "01326cc997716bebb0eab9fe1f463fffa0ee586079e4ca0e5bb096ab6fcfedab",
+    ),
+    pascal(
+        "nvidia/gp102/acr/ucode_load.bin",
+        17152,
+        "5d2ce92a781c6c42a781a50badfbfc7db9267945996ee46aaa15429facdf2920",
+    ),
+    pascal(
+        "nvidia/gp102/acr/ucode_unload.bin",
+        3328,
+        "1f139e5ada193fc191ed9a235a53901076d0008f3ea15ab7ca66d33748ea6a03",
+    ),
+    pascal(
+        "nvidia/gp102/acr/unload_bl.bin",
+        1280,
+        "dcee20bfa564da6a8fadc21dd9e0087d45f630b8b18f8e296954a3b8f0e28173",
+    ),
+    pascal(
+        "nvidia/gp102/gr/fecs_data.bin",
+        2256,
+        "041dfad51dc4964b99a1aa90b9ed1526195fbc66b969b5b6ad9b86b9cb3952c2",
+    ),
+    pascal(
+        "nvidia/gp102/gr/fecs_inst.bin",
+        20927,
+        "5112f12dbfdc5eb9fb5b00b443039e0d40c2be4d2a9fba2ccb2706c0000f947f",
+    ),
+    pascal(
+        "nvidia/gp102/gr/fecs_sig.bin",
+        192,
+        "05bcaff805826200be9a1f80a96387918132d0a26068689318af80bd24c502a9",
+    ),
+    pascal(
+        "nvidia/gp102/gr/gpccs_data.bin",
+        1832,
+        "b91be1dffbc24afade1045ec2c3eeff2437f667a0f2eb5c462d2338fbd7beb2d",
+    ),
+    pascal(
+        "nvidia/gp102/gr/gpccs_inst.bin",
+        13307,
+        "36ad0ee74de6b79a4101cc6c4d4aa7618c49a967571c044b37f51d0f536cd52c",
+    ),
+    pascal(
+        "nvidia/gp102/gr/gpccs_sig.bin",
+        192,
+        "722e4b6b95964783c036c4fc60c958cdbac305b2202d1f9734a38c96cbd45e64",
+    ),
+    pascal(
+        "nvidia/gp102/gr/sw_bundle_init.bin",
+        7680,
+        "5f543872e72731f164e9e9f1fc19fc30e73a508629d2c6d0724fe6247c976c50",
+    ),
+    pascal(
+        "nvidia/gp102/gr/sw_ctx.bin",
+        6216,
+        "eec97c35ccf2c66125c490c12a33f73d8a44fd6826d083100c6ef7f11f0ed0e6",
+    ),
+    pascal(
+        "nvidia/gp102/gr/sw_method_init.bin",
+        12288,
+        "1123176ec93df9046b3fb5071141235424c101e405294f505494e00ba925a719",
+    ),
+    pascal(
+        "nvidia/gp102/gr/sw_nonctx.bin",
+        2496,
+        "29b22445ed536a852908ec6f1600fe757951de7dd7eff73c627f614639543172",
+    ),
+    pascal(
+        "nvidia/gp102/nvdec/scrubber.bin",
+        3840,
+        "0f70a43c184d6db4c4c4f1821bc51576decc9e3d61f45349ed113621df1e06e7",
+    ),
+    pascal(
+        "nvidia/gp102/sec2/desc-1.bin",
+        656,
+        "0d0ce7988281fc9115d3c6320e7b904d530719ddeacdd85ea29f744ba7b039ee",
+    ),
+    pascal(
+        "nvidia/gp102/sec2/image-1.bin",
+        109568,
+        "90404a9c365eb9b2d3f692c255bc3b50af9313ccae73306df369ec712c4b511e",
+    ),
+    pascal(
+        "nvidia/gp102/sec2/sig-1.bin",
+        192,
+        "14c3524427b08a6dca1fc846f3830387ee835c3257792860783e5e4148833ebb",
+    ),
+    pascal(
+        "nvidia/gp104/gr/fecs_data.bin",
+        2576,
+        "5dc0528718dcff24a292fb4a92bd1d73967eeb11e2e838852853496ede46dea0",
+    ),
+    pascal(
+        "nvidia/gp104/gr/fecs_inst.bin",
+        22760,
+        "d4f0706e226fd447899fa05bdc94a6ed3f71c67e3ebdb881f47ecd0c7d294e63",
+    ),
+    pascal(
+        "nvidia/gp104/gr/fecs_sig.bin",
+        192,
+        "9a47560b4a60c6c203fed3e4dbbf5db5da481400ee13b94c921ff9f703609b9f",
+    ),
+    pascal(
+        "nvidia/gp104/gr/gpccs_data.bin",
+        1832,
+        "6db54b7a0b75ac9fbb8feb64488c36c843eec47bf4dccd72b29b7f4c55bdee5e",
+    ),
+    pascal(
+        "nvidia/gp104/gr/gpccs_inst.bin",
+        13307,
+        "36ad0ee74de6b79a4101cc6c4d4aa7618c49a967571c044b37f51d0f536cd52c",
+    ),
+    pascal(
+        "nvidia/gp104/gr/gpccs_sig.bin",
+        192,
+        "3468062a8f2e02b47a00993e6190fbd2569747b4304fe9eb06f93fdacb626299",
+    ),
+    pascal(
+        "nvidia/gp106/gr/fecs_data.bin",
+        2256,
+        "49288ac6c6e48f2e329d7c92a99cfcb259ab479f45744feb21b55e78c75a54a9",
+    ),
+    pascal(
+        "nvidia/gp106/gr/fecs_sig.bin",
+        192,
+        "1bcf5680d39eac6f0b641867836729c39f560de6d209c260583e6b080a75d996",
+    ),
+    pascal(
+        "nvidia/gp106/gr/gpccs_data.bin",
+        1832,
+        "4f468ae62a5abbb158ce6303962755ca3f77df4ea697b7aadc6a970a5920ee27",
+    ),
+    pascal(
+        "nvidia/gp106/gr/gpccs_sig.bin",
+        192,
+        "b9681338ccbc9d367fcc76c0e2dfae935dc9c8b932c2a2b218e6a81450438b1f",
+    ),
+    pascal(
+        "nvidia/gp107/gr/fecs_bl.bin",
+        576,
+        "e683be6f7b2012f4e5e6f4995086a5f0ef5bc4fd687f24dcedc5df7070f3a43d",
+    ),
+    pascal(
+        "nvidia/gp107/gr/fecs_data.bin",
+        2756,
+        "e61962ec88d1cc0c38f2397c6a5e8f3521d9299472e586700011fe621ee85999",
+    ),
+    pascal(
+        "nvidia/gp107/gr/fecs_inst.bin",
+        22879,
+        "e68760571d3da8734485e819d79202f7ead21797ee8b4b67eb579aab1489f02a",
+    ),
+    pascal(
+        "nvidia/gp107/gr/fecs_sig.bin",
+        192,
+        "6682d9eb17e81108484dc84c73f1e765ea7d8607ca3a96834ec1682f8e014856",
+    ),
+    pascal(
+        "nvidia/gp107/gr/gpccs_bl.bin",
+        576,
+        "302d719d56b68b5641d659b05a84dde870072c31ecf931491f5303ebce1d62c5",
+    ),
+    pascal(
+        "nvidia/gp107/gr/gpccs_data.bin",
+        2100,
+        "bc16310ec9c2128e7c8c51e23152b29f0f1ee7088494f11cf852e98afe19992c",
+    ),
+    pascal(
+        "nvidia/gp107/gr/gpccs_inst.bin",
+        12587,
+        "1ef4cc6d4798577850102dcddc300fe905e091dc7ddc9d6289360f6ef1291f76",
+    ),
+    pascal(
+        "nvidia/gp107/gr/gpccs_sig.bin",
+        192,
+        "7eab77572dce601d91055d3efe5e8d4bfc1350367af324204bfd76282eebd9ef",
+    ),
+    pascal(
+        "nvidia/gp107/gr/sw_ctx.bin",
+        6000,
+        "c60f4e9ea298af2ebfb466accacae95e4a1baa7138971b280a97c4131ff29121",
+    ),
+    pascal(
+        "nvidia/gp107/gr/sw_nonctx.bin",
+        2496,
+        "4890912b427bde77e4998a601ef8b282eae1ae5ce4dc20e5de2d7b50917f4ac0",
+    ),
+];
+
 const AMDGPU_LICENSE: Artifact = Artifact {
     source: LINUX_FIRMWARE,
     revision: GSP_REVISION,
@@ -1942,9 +2158,14 @@ fn select_gsp(request: &Request) -> Option<&'static Recipe> {
 /// The chip of an NVIDIA GPU with PCI device ID `device`, named as nouveau
 /// names chips, by the ranges NVIDIA gives each chip's products. nouveau reads
 /// the real chip from the GPU at boot and names any file a wrong answer left
-/// out.
+/// out. Pascal's GP102 to GP107 are the GTX 1050 to 1080 Ti, Titan X and Xp,
+/// their mobile parts and the Quadro P-series built on them.
 pub fn nvidia_chip(device: u16) -> Option<&'static str> {
     Some(match device {
+        0x1b00..=0x1b7f => "gp102",
+        0x1b80..=0x1bff => "gp104",
+        0x1c00..=0x1c7f => "gp106",
+        0x1c80..=0x1cff => "gp107",
         0x1e00..=0x1e7f => "tu102",
         0x1e80..=0x1eff => "tu104",
         0x1f00..=0x1f7f => "tu106",
@@ -2011,6 +2232,120 @@ pub fn require_gsp(inventory: &mut Inventory, chip: &str) -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error(format!("{chip} is no chip nouveau runs GSP-RM on")))
+    }
+}
+
+/// The Pascal chips nouveau boots without GSP-RM, through GP102's ACR and
+/// SEC2 (`gp102_acr_new`, `gp102_sec2_new`), each with graphics firmware of
+/// its own: the GeForce 10 series from the GTX 1050 to the 1080 Ti.
+const PASCAL_CHIPS: [&str; 4] = ["gp102", "gp104", "gp106", "gp107"];
+
+/// What nouveau asks for on a [`PASCAL_CHIPS`] chip, after `nvidia/<chip>/`:
+/// the ACR's load and unload images and their bootloaders
+/// (`nvkm/subdev/acr/gp102.c`); FECS's and GPCCS's bootloader, code, data
+/// and signature and the context lists (`gm200_gr_load`,
+/// `gk20a_gr_load_sw`); the VPR scrubber (`nvkm/subdev/fb/gp102.c`); and
+/// SEC2's version 1 descriptor, image and signature, which nouveau tries
+/// first and boots with (`gp102_sec2_fwif`). Version 0 is only its fallback
+/// when version 1 fails: three more of the firmware handoff's images that a
+/// boot would read for nothing, so no stick holds them and a request for
+/// them answers that they do not exist.
+const PASCAL_FILES: [&str; 20] = [
+    "acr/bl.bin",
+    "acr/ucode_load.bin",
+    "acr/unload_bl.bin",
+    "acr/ucode_unload.bin",
+    "gr/fecs_bl.bin",
+    "gr/fecs_inst.bin",
+    "gr/fecs_data.bin",
+    "gr/fecs_sig.bin",
+    "gr/gpccs_bl.bin",
+    "gr/gpccs_inst.bin",
+    "gr/gpccs_data.bin",
+    "gr/gpccs_sig.bin",
+    "gr/sw_nonctx.bin",
+    "gr/sw_ctx.bin",
+    "gr/sw_bundle_init.bin",
+    "gr/sw_method_init.bin",
+    "nvdec/scrubber.bin",
+    "sec2/desc-1.bin",
+    "sec2/image-1.bin",
+    "sec2/sig-1.bin",
+];
+
+/// The directory linux-firmware's `WHENCE` links `chip`'s `file` to, for a
+/// [`PASCAL_CHIPS`] chip and a [`PASCAL_FILES`] file. Each chip has its own
+/// FECS and GPCCS data and signatures; GP107 its own falcon bootloaders,
+/// where the others take GM200's; GP102, GP104 and GP107 their own falcon
+/// code, which GP106 takes from GP102; GP107 its own context and non-context
+/// lists. The rest, the ACR, SEC2, the scrubber and the bundle and method
+/// lists, are GP102's.
+fn pascal_directory(chip: &str, file: &str) -> Option<&'static str> {
+    let chip = *PASCAL_CHIPS.iter().find(|known| **known == chip)?;
+    if !PASCAL_FILES.contains(&file) {
+        return None;
+    }
+    Some(match (chip, file) {
+        (_, "gr/fecs_data.bin" | "gr/fecs_sig.bin" | "gr/gpccs_data.bin" | "gr/gpccs_sig.bin") => {
+            chip
+        }
+        ("gp107", "gr/fecs_bl.bin" | "gr/gpccs_bl.bin") => chip,
+        (_, "gr/fecs_bl.bin" | "gr/gpccs_bl.bin") => "gm200",
+        ("gp102" | "gp104" | "gp107", "gr/fecs_inst.bin" | "gr/gpccs_inst.bin") => chip,
+        ("gp107", "gr/sw_ctx.bin" | "gr/sw_nonctx.bin") => chip,
+        _ => "gp102",
+    })
+}
+
+/// nouveau's request for a file of a Pascal chip, through `WHENCE`'s links.
+fn select_pascal(request: &Request) -> Option<&'static Recipe> {
+    if request.target.hardware != "nvidia" || request.target.revision != "linux-firmware" {
+        return None;
+    }
+    let (chip, file) = request.name.strip_prefix("nvidia/")?.split_once('/')?;
+    let member = format!("nvidia/{}/{file}", pascal_directory(chip, file)?);
+    PASCAL.iter().find(|recipe| recipe.image.member == member)
+}
+
+/// Requires every file nouveau asks for on the Pascal `chip`, named as it
+/// names chips (`gp104`). nouveau starts no graphics engine without the ACR,
+/// SEC2 and graphics files, so each is needed.
+pub fn require_pascal(inventory: &mut Inventory, chip: &str) -> Result<(), Error> {
+    if !PASCAL_CHIPS.contains(&chip) {
+        return Err(Error(format!(
+            "{chip} is no Pascal chip nouveau boots through GP102's ACR"
+        )));
+    }
+    let target = Target {
+        driver: "nouveau",
+        hardware: "nvidia",
+        revision: "linux-firmware",
+        board: None,
+    };
+    for file in PASCAL_FILES {
+        let name = format!("nvidia/{chip}/{file}");
+        let request = Requirement {
+            name: &name,
+            target,
+            minimum_bytes: 1,
+        };
+        if select_pascal(&Request::from(request)).is_none() {
+            return Err(Error(format!("no pinned recipe for {name}")));
+        }
+        inventory.observe(request)?;
+    }
+    Ok(())
+}
+
+/// Requires the files nouveau asks for on `chip`, named as it names chips:
+/// GSP-RM's from Turing on ([`require_gsp`]), and on a Pascal chip the ACR,
+/// SEC2 and graphics firmware it boots the chip's engines with
+/// ([`require_pascal`]).
+pub fn require_nouveau(inventory: &mut Inventory, chip: &str) -> Result<(), Error> {
+    if PASCAL_CHIPS.contains(&chip) {
+        require_pascal(inventory, chip)
+    } else {
+        require_gsp(inventory, chip)
     }
 }
 
@@ -2375,7 +2710,7 @@ pub fn recipe(request: &Request) -> Option<&'static Recipe> {
         "wifi-mt792x" => select_mediatek_wifi(request),
         "mediatek-bluetooth-usb-mt79xx-v1" => select_mediatek_bluetooth(request),
         "realtek-wifi" => select_realtek_wifi(request),
-        "nouveau" => select_gsp(request),
+        "nouveau" => select_gsp(request).or_else(|| select_pascal(request)),
         "xe" => select_xe(request),
         "amdgpu" => select_amdgpu(request),
         _ => None,
@@ -3172,6 +3507,150 @@ mod tests {
     }
 
     #[test]
+    fn a_pascal_chip_requires_every_file_nouveau_boots_it_with() {
+        for chip in PASCAL_CHIPS {
+            let mut inventory = Inventory::default();
+            require_pascal(&mut inventory, chip).unwrap();
+            let names: Vec<_> = inventory
+                .requests()
+                .iter()
+                .map(|request| request.name.clone())
+                .collect();
+            assert_eq!(names.len(), PASCAL_FILES.len());
+            for (name, file) in names.iter().zip(PASCAL_FILES) {
+                assert_eq!(*name, format!("nvidia/{chip}/{file}"));
+                // Each pinned under its exact name and nouveau's binding.
+                assert!(gsp_member(name).is_some(), "{name}");
+            }
+            // Every file nouveau asks for, as `require_nouveau` dispatches.
+            let mut dispatched = Inventory::default();
+            require_nouveau(&mut dispatched, chip).unwrap();
+            assert_eq!(dispatched.requests().len(), names.len());
+            // No GSP-RM file: nouveau runs no GSP on Pascal.
+            assert!(require_gsp(&mut Inventory::default(), chip).is_err());
+        }
+        // GP108 boots through `gp108_acr`, GP100 its ACR on the PMU, and
+        // Maxwell and Volta are not pinned.
+        for chip in ["gp108", "gp100", "gm204", "gv100"] {
+            let mut inventory = Inventory::default();
+            assert!(require_nouveau(&mut inventory, chip).is_err(), "{chip}");
+            assert!(inventory.requests().is_empty());
+        }
+        // Turing and later still dispatch to GSP-RM's files.
+        let mut turing = Inventory::default();
+        require_nouveau(&mut turing, "tu104").unwrap();
+        assert!(
+            turing
+                .requests()
+                .iter()
+                .any(|request| request.name.contains("/gsp/gsp-"))
+        );
+    }
+
+    #[test]
+    fn a_pascal_chips_file_follows_linux_firmwares_links() {
+        // linux-firmware's `WHENCE` at `GSP_REVISION`.
+        for (name, member) in [
+            ("nvidia/gp104/acr/bl.bin", "nvidia/gp102/acr/bl.bin"),
+            (
+                "nvidia/gp104/acr/ucode_unload.bin",
+                "nvidia/gp102/acr/ucode_unload.bin",
+            ),
+            ("nvidia/gp104/gr/fecs_bl.bin", "nvidia/gm200/gr/fecs_bl.bin"),
+            (
+                "nvidia/gp104/gr/gpccs_bl.bin",
+                "nvidia/gm200/gr/gpccs_bl.bin",
+            ),
+            (
+                "nvidia/gp104/gr/fecs_inst.bin",
+                "nvidia/gp104/gr/fecs_inst.bin",
+            ),
+            (
+                "nvidia/gp104/gr/gpccs_sig.bin",
+                "nvidia/gp104/gr/gpccs_sig.bin",
+            ),
+            ("nvidia/gp104/gr/sw_ctx.bin", "nvidia/gp102/gr/sw_ctx.bin"),
+            (
+                "nvidia/gp104/gr/sw_method_init.bin",
+                "nvidia/gp102/gr/sw_method_init.bin",
+            ),
+            (
+                "nvidia/gp104/nvdec/scrubber.bin",
+                "nvidia/gp102/nvdec/scrubber.bin",
+            ),
+            (
+                "nvidia/gp104/sec2/image-1.bin",
+                "nvidia/gp102/sec2/image-1.bin",
+            ),
+            ("nvidia/gp102/gr/fecs_bl.bin", "nvidia/gm200/gr/fecs_bl.bin"),
+            ("nvidia/gp102/gr/sw_ctx.bin", "nvidia/gp102/gr/sw_ctx.bin"),
+            (
+                "nvidia/gp106/gr/fecs_inst.bin",
+                "nvidia/gp102/gr/fecs_inst.bin",
+            ),
+            (
+                "nvidia/gp106/gr/gpccs_data.bin",
+                "nvidia/gp106/gr/gpccs_data.bin",
+            ),
+            ("nvidia/gp107/gr/fecs_bl.bin", "nvidia/gp107/gr/fecs_bl.bin"),
+            (
+                "nvidia/gp107/gr/sw_nonctx.bin",
+                "nvidia/gp107/gr/sw_nonctx.bin",
+            ),
+            (
+                "nvidia/gp107/gr/sw_bundle_init.bin",
+                "nvidia/gp102/gr/sw_bundle_init.bin",
+            ),
+            (
+                "nvidia/gp107/acr/unload_bl.bin",
+                "nvidia/gp102/acr/unload_bl.bin",
+            ),
+        ] {
+            assert_eq!(gsp_member(name), Some(member), "{name}");
+        }
+        for name in [
+            // GP108's own ACR and SEC2, and GP100's.
+            "nvidia/gp108/acr/bl.bin",
+            "nvidia/gp108/gr/fecs_bl.bin",
+            "nvidia/gp100/acr/bl.bin",
+            // Names nouveau does not ask for on Pascal.
+            "nvidia/gp104/gr/sw_veid_bundle_init.bin",
+            "nvidia/gp104/sec2/desc-2.bin",
+            // SEC2's version 0, nouveau's fallback, which no stick holds.
+            "nvidia/gp104/sec2/sig.bin",
+            "nvidia/gp106/sec2/image.bin",
+            "nvidia/gp104/gsp/gsp-570.144.bin",
+            "nvidia/gp104/acr/wpr.bin",
+        ] {
+            assert_eq!(gsp_member(name), None, "{name}");
+        }
+        // Every recipe is a file some request reaches, each member once, all
+        // at the pinned revision under NVIDIA's notice.
+        for recipe in PASCAL {
+            let reached = PASCAL_CHIPS.iter().any(|chip| {
+                PASCAL_FILES.iter().any(|file| {
+                    gsp_member(&format!("nvidia/{chip}/{file}")) == Some(recipe.image.member)
+                })
+            });
+            assert!(reached, "{}", recipe.image.member);
+            assert_eq!(
+                PASCAL
+                    .iter()
+                    .filter(|other| other.image.member == recipe.image.member)
+                    .count(),
+                1
+            );
+            assert_eq!(recipe.image.source, LINUX_FIRMWARE);
+            assert_eq!(recipe.image.revision, GSP_REVISION);
+            assert_eq!(*recipe.license, GSP_LICENSE);
+        }
+        assert_eq!(PASCAL.len(), 40);
+        // 0.3 MB in all: GSP-RM's images are hundreds of times larger.
+        let bytes: usize = PASCAL.iter().map(|recipe| recipe.image.length).sum();
+        assert_eq!(bytes, 301_519);
+    }
+
+    #[test]
     fn kernel_org_artifacts_use_cgit_plain_urls_and_the_regdb_is_pinned() {
         let artifact = Artifact {
             source: WIRELESS_REGDB,
@@ -3287,6 +3766,24 @@ mod tests {
         );
         // An NVIDIA GPU's audio function is no GPU.
         assert_eq!(nvidia_chip(0x22e9), None);
+        // The GeForce 10 series from GP102 to GP107: the GTX 1080, 1080 Ti,
+        // 1070, 1060 and 1050 Ti, a GTX 1080 laptop and a Quadro P4000.
+        for (device, chip) in [
+            (0x1b80, "gp104"),
+            (0x1b06, "gp102"),
+            (0x1b81, "gp104"),
+            (0x1c03, "gp106"),
+            (0x1c82, "gp107"),
+            (0x1ba0, "gp104"),
+            (0x1bb1, "gp104"),
+        ] {
+            assert_eq!(nvidia_chip(device), Some(chip), "{device:04x}");
+            require_nouveau(&mut Inventory::default(), chip).unwrap();
+        }
+        // A GT 1030 (GP108), a GTX 980 (GM204) and a Titan V (GV100).
+        for device in [0x1d01, 0x13c0, 0x1d81] {
+            assert_eq!(nvidia_chip(device), None, "{device:04x}");
+        }
     }
 
     #[test]

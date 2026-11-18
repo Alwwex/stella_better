@@ -348,21 +348,22 @@ static GPU_NOTICE: core::sync::atomic::AtomicU8 =
 /// card: the install itself draws through no GPU and would finish, and the
 /// installed macOS then could not start.
 pub const NO_NVIDIA_GPU_NOTICE: &str = "No NVIDIA graphics card found: macOS can be installed, \
-    but it starts only with a GeForce GTX 16 or RTX 20, 30, 40 or 50 series card.";
+    but it starts only with a GeForce GTX 10 (GTX 1050 or later), GTX 16 or RTX 20, 30, 40 or 50 \
+    series card.";
 
 /// Said in the same place on a PC whose NVIDIA cards are all of chips Stela
 /// has no driver for, older or newer than the series it names.
 pub const NO_DRIVEN_NVIDIA_GPU_NOTICE: &str = "The NVIDIA graphics card here is not one Stela \
-    drives: macOS can be installed, but it starts only with a GeForce GTX 16 or RTX 20, 30, 40 \
-    or 50 series card.";
+    drives: macOS can be installed, but it starts only with a GeForce GTX 10 (GTX 1050 or later), \
+    GTX 16 or RTX 20, 30, 40 or 50 series card.";
 
 /// Said in the same place when no NVIDIA card Stela drives answers yet but
 /// a PCI port shows nothing below it: a card the firmware left powered off
 /// there, as on some laptops, answers only after Stela powers the port on.
 pub const NO_NVIDIA_GPU_YET_NOTICE: &str = "No NVIDIA graphics card Stela drives found yet: \
     a card the PC keeps powered off, as some laptops do, is found only after Stela has started. \
-    macOS can be installed, but it starts only with a GeForce GTX 16 or RTX 20, 30, 40 or 50 \
-    series card.";
+    macOS can be installed, but it starts only with a GeForce GTX 10 (GTX 1050 or later), GTX 16 \
+    or RTX 20, 30, 40 or 50 series card.";
 
 /// What to say before an install or a start when the census ([`discover`])
 /// found no NVIDIA display controller Stela drives.

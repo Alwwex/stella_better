@@ -4,9 +4,12 @@ use alloc::{format, string::String, vec::Vec};
 use stela_drivers::gpu::{Adapter, Vendor};
 use stela_loader::host_firmware::recipes::nvidia_chip;
 
-/// The NVIDIA generations Stela's GPU driver runs (Turing, Ampere, Ada and
-/// Blackwell: every chip `recipes::nvidia_chip` names), as people know them.
-pub const SUPPORTED: &str = "an NVIDIA GeForce GTX 16 or RTX 20, 30, 40 or 50 series GPU";
+/// The NVIDIA generations Stela's GPU driver runs (Pascal's GP102 to GP107,
+/// Turing, Ampere, Ada and Blackwell: every chip `recipes::nvidia_chip`
+/// names), as people know them. The GT 1030 is Pascal's GP108, which is not
+/// among them.
+pub const SUPPORTED: &str =
+    "an NVIDIA GeForce GTX 10 (GTX 1050 or later), GTX 16 or RTX 20, 30, 40 or 50 series GPU";
 
 /// The boot screen's line when the NVIDIA GPU started with no screen
 /// connected and macOS is shown on the screen the PC started on, which
@@ -448,8 +451,21 @@ mod tests {
 
     #[test]
     fn an_older_gpu_or_none_names_what_is_supported() {
-        // A GeForce GTX 1080 (Pascal, gp104).
-        let pascal = refused(
+        // A GeForce GT 1030 (Pascal, gp108).
+        let gp108 = refused(
+            Vendor::Nvidia,
+            "01:00.0",
+            0x1d01,
+            Reason::MissingFirmware,
+            "",
+        );
+        assert_eq!(
+            gp108,
+            "the NVIDIA GPU at 01:00.0 (device 1d01) is not supported: Stela needs an NVIDIA \
+             GeForce GTX 10 (GTX 1050 or later), GTX 16 or RTX 20, 30, 40 or 50 series GPU"
+        );
+        // A GeForce GTX 1080 (Pascal, gp104) is driven: its chip is named.
+        let gtx1080 = refused(
             Vendor::Nvidia,
             "01:00.0",
             0x1b80,
@@ -457,9 +473,9 @@ mod tests {
             "",
         );
         assert_eq!(
-            pascal,
-            "the NVIDIA GPU at 01:00.0 (device 1b80) is not supported: Stela needs an NVIDIA \
-             GeForce GTX 16 or RTX 20, 30, 40 or 50 series GPU"
+            gtx1080,
+            "the USB has no firmware for this PC's NVIDIA gp104 GPU. On another computer, plug \
+             in this USB and run `stela repair`"
         );
         assert!(none(&[]).starts_with("this PC has no NVIDIA GPU: Stela needs"));
     }
@@ -484,7 +500,7 @@ mod tests {
             none(&[amd, intel]),
             "this PC has no NVIDIA GPU, only the AMD display adapter at 0000:03:00.0 (device \
              744c) and the Intel display adapter at 0000:00:00.0 (device a780): Stela needs an \
-             NVIDIA GeForce GTX 16 or RTX 20, 30, 40 or 50 series GPU"
+             NVIDIA GeForce GTX 10 (GTX 1050 or later), GTX 16 or RTX 20, 30, 40 or 50 series GPU"
         );
         assert_eq!(
             unused(&amd),

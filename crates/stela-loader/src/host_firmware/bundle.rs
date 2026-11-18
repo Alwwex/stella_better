@@ -64,7 +64,7 @@ enum Port {
 
 /// Every recipe family, in the order a volume short of room keeps them: the
 /// small network and Bluetooth files first, the GPU's large images last.
-const ALL: [(&str, &[Recipe], Port); 10] = [
+const ALL: [(&str, &[Recipe], Port); 11] = [
     (
         "Wi-Fi regulatory database",
         recipes::REGULATORY,
@@ -81,6 +81,9 @@ const ALL: [(&str, &[Recipe], Port); 10] = [
         Port::Always,
     ),
     ("Intel Bluetooth", recipes::INTEL_RSA, Port::Always),
+    // nouveau's ACR, SEC2 and graphics firmware for GP102 to GP107: 40
+    // files, 0.3 MB.
+    ("NVIDIA Pascal", recipes::PASCAL, Port::Always),
     ("AMD GPU", recipes::AMDGPU, Port::Amd),
     ("NVIDIA GSP-RM", recipes::GSP, Port::Always),
 ];
@@ -456,7 +459,11 @@ impl Late {
 }
 
 /// The GPU families a GPU can need late: the family's name in [`ALL`], the
-/// PCI vendor of its GPUs and the port it belongs to.
+/// PCI vendor of its GPUs and the port it belongs to. "NVIDIA Pascal" is not
+/// among them: a Pascal GPU's files are read only when the firmware's census
+/// shows the GPU. Its 40 files beside GSP-RM's 26 would crowd the handoff's
+/// images, and the smaller family taken first would leave out the GSP-RM
+/// files a hybrid laptop's Turing or later GPU needs.
 const GPU_FAMILIES: [(&str, u16, Port); 2] = [
     ("AMD GPU", 0x1002, Port::Amd),
     ("NVIDIA GSP-RM", 0x10de, Port::Always),
@@ -615,7 +622,7 @@ pub fn select_for(functions: &[Pci], ports: Ports) -> Selection {
         let mut inventory = Inventory::default();
         if function.vendor == 0x10de && function.class == 0x03 {
             match recipes::nvidia_chip(function.device) {
-                Some(chip) if recipes::require_gsp(&mut inventory, chip).is_ok() => {
+                Some(chip) if recipes::require_nouveau(&mut inventory, chip).is_ok() => {
                     selection.plan(&inventory, &why);
                     driven.push(function.vendor);
                 }

@@ -20,17 +20,17 @@ fn the_complete_bundle_holds_every_recipe_once_by_content() {
     let (count, bytes) = size();
     assert_eq!(count, objects.len());
     // The RTL8168H and RTL8168M share a file, as the RTL9151A and RTL9151AS
-    // do, and, with the AMD port, amdgpu's `mec` and `mec2` of Raphael and
-    // of Navi 21.
+    // do, GP104's `gpccs_inst` GP102's, and GP102's `acr/bl` Turing's, and,
+    // with the AMD port, amdgpu's `mec` and `mec2` of Raphael and of Navi 21.
     if Ports::BUILT == Ports::ALL {
-        assert_eq!(count + 4, recipes().count());
-        // The recipes' recorded lengths: 121 files, 184.9 MiB.
-        assert_eq!((count, bytes), (121, 193_887_456), "{count} {bytes}");
+        assert_eq!(count + 6, recipes().count());
+        // The recipes' recorded lengths: 159 files, 185.2 MiB.
+        assert_eq!((count, bytes), (159, 194_174_388), "{count} {bytes}");
     }
     if Ports::BUILT == Ports::NONE {
-        assert_eq!(count + 2, recipes().count());
-        // Without the AMD port: 88 files, 177.0 MiB.
-        assert_eq!((count, bytes), (88, 185_584_904), "{count} {bytes}");
+        assert_eq!(count + 4, recipes().count());
+        // Without the AMD port: 126 files, 177.3 MiB.
+        assert_eq!((count, bytes), (126, 185_871_836), "{count} {bytes}");
     }
     // The GPU's large images come last, for a volume short of room.
     assert_eq!(objects.last().unwrap().length, 64_116_464);
@@ -241,10 +241,53 @@ fn a_boot_selects_exactly_the_files_its_pci_functions_need() {
     );
     assert_eq!(found.len(), USB.len() + files.len() - 1);
     assert!(navi21.unknown.is_empty());
-    // An NVIDIA display chip no recipe covers is named once.
-    let old = select(&[pci(0x10de, 0x1b80, 0x03), pci(0x10de, 0x1b80, 0x03)]);
-    assert_eq!(old.unknown, ["pci 10de:1b80"]);
+    // An NVIDIA display chip no recipe covers is named once: a GT 1030
+    // (GP108), which nouveau boots through an ACR of its own.
+    let old = select(&[pci(0x10de, 0x1d01, 0x03), pci(0x10de, 0x1d01, 0x03)]);
+    assert_eq!(old.unknown, ["pci 10de:1d01"]);
     assert_eq!(members(&old), USB);
+    // A GTX 1080 (GP104) and its audio function: the ACR, SEC2, scrubber
+    // and graphics files nouveau boots it with, where linux-firmware's
+    // links put them.
+    let gtx1080 = select(&[pci(0x10de, 0x1b80, 0x03), pci(0x10de, 0x10f0, 0x04)]);
+    let mut expected: Vec<&str> = USB.to_vec();
+    expected.extend([
+        "nvidia/gm200/gr/fecs_bl.bin",
+        "nvidia/gm200/gr/gpccs_bl.bin",
+        "nvidia/gp102/acr/bl.bin",
+        "nvidia/gp102/acr/ucode_load.bin",
+        "nvidia/gp102/acr/ucode_unload.bin",
+        "nvidia/gp102/acr/unload_bl.bin",
+        "nvidia/gp102/gr/sw_bundle_init.bin",
+        "nvidia/gp102/gr/sw_ctx.bin",
+        "nvidia/gp102/gr/sw_method_init.bin",
+        "nvidia/gp102/gr/sw_nonctx.bin",
+        "nvidia/gp102/nvdec/scrubber.bin",
+        "nvidia/gp102/sec2/desc-1.bin",
+        "nvidia/gp102/sec2/image-1.bin",
+        "nvidia/gp102/sec2/sig-1.bin",
+        "nvidia/gp104/gr/fecs_data.bin",
+        "nvidia/gp104/gr/fecs_inst.bin",
+        "nvidia/gp104/gr/fecs_sig.bin",
+        "nvidia/gp104/gr/gpccs_data.bin",
+        "nvidia/gp104/gr/gpccs_inst.bin",
+        "nvidia/gp104/gr/gpccs_sig.bin",
+    ]);
+    expected.sort_unstable();
+    assert_eq!(members(&gtx1080), expected);
+    assert!(gtx1080.unknown.is_empty());
+    // 0.2 MB beside the USB files.
+    assert_eq!(gtx1080.bytes() - select(&[]).bytes(), 207_987);
+    // With an RTL8168, whose family is 25 files, and an AX210 beside it:
+    // within the handoff's images with the PC's SMBIOS and all 18 Intel
+    // Wi-Fi variables observed.
+    let desktop = select(&[
+        pci(0x10de, 0x1b80, 0x03),
+        pci(0x10ec, 0x8168, 0x02),
+        pci(0x8086, 0x2725, 0x02),
+    ]);
+    assert_eq!(desktop.wanted.len(), 59);
+    assert!(desktop.wanted.len() + 1 + 18 <= super::super::MAX_HANDOFF_IMAGES);
 }
 
 #[test]
@@ -530,14 +573,19 @@ fn a_port_with_nothing_below_it_is_where_a_gpu_can_answer_later() {
     assert_eq!(empty, [Some((2, 2)), Some((3, 3))]);
 }
 
-/// The files of each chip Stela's NVIDIA driver runs, by recipe.
+/// The files of each GSP-RM chip Stela's NVIDIA driver runs, by recipe: the
+/// late "NVIDIA GSP-RM" family's. Pascal's are read only for a GPU the
+/// census shows.
 fn every_nvidia_chip_file() -> Vec<&'static str> {
     let mut files = Vec::new();
     let mut chips: Vec<&str> = (0..=u16::MAX).filter_map(recipes::nvidia_chip).collect();
     chips.dedup();
-    assert!(chips.contains(&"ad107"));
+    assert!(chips.contains(&"ad107") && chips.contains(&"gp104"));
     for chip in chips {
         let mut inventory = Inventory::default();
+        if recipes::require_pascal(&mut Inventory::default(), chip).is_ok() {
+            continue;
+        }
         recipes::require_gsp(&mut inventory, chip).unwrap();
         for selected in recipes::Plan::select(&inventory).unwrap().selections() {
             files.push(selected.recipe.image.member);
@@ -562,7 +610,7 @@ fn a_gpu_the_firmware_left_without_power_gets_every_chips_files() {
     // Every NVIDIA file: 26 files, 150.6 MiB.
     assert_eq!((late.files.len(), late.bytes()), (26, 157_944_212));
     let left = laptop.take_late(Room {
-        images: super::super::MAX_IMAGES,
+        images: super::super::MAX_HANDOFF_IMAGES,
         bytes: super::super::MAX_TOTAL_BYTES,
     });
     assert!(left.is_empty());
@@ -573,7 +621,7 @@ fn a_gpu_the_firmware_left_without_power_gets_every_chips_files() {
     }
     // With the USB files and an Intel Wi-Fi card's it stays well within
     // the handoff's images and bytes.
-    assert!(laptop.wanted.len() + 8 < super::super::MAX_IMAGES);
+    assert!(laptop.wanted.len() + 8 < super::super::MAX_HANDOFF_IMAGES);
     assert!(laptop.bytes() + 16 * 1024 * 1024 < super::super::MAX_TOTAL_BYTES);
     // With the AMD port, its files too.
     let amd = select_for(&functions, Ports::ALL);
@@ -595,10 +643,14 @@ fn a_visible_gpu_or_no_empty_port_reads_no_late_files() {
     let amd = select_for(&[pci(0x1002, 0x7550, 0x03), port(2)], Ports::ALL);
     let families: Vec<_> = amd.late.iter().map(|late| late.family).collect();
     assert_eq!(families, ["NVIDIA GSP-RM"]);
-    // An NVIDIA chip no recipe covers drives nothing: a second GPU may
-    // still answer late.
+    // An NVIDIA chip no recipe covers (a GT 1030) drives nothing: a second
+    // GPU may still answer late.
+    let gp108 = select_for(&[pci(0x10de, 0x1d01, 0x03), port(2)], Ports::NONE);
+    assert_eq!(gp108.late.len(), 1);
+    // A GTX 1080 is driven: its own files, and no late NVIDIA family.
     let pascal = select_for(&[pci(0x10de, 0x1b80, 0x03), port(2)], Ports::NONE);
-    assert_eq!(pascal.late.len(), 1);
+    assert!(pascal.late.is_empty());
+    assert!(members(&pascal).contains(&"nvidia/gp104/gr/fecs_inst.bin"));
     // No port with nothing below it: nothing can answer later.
     let below = Pci {
         bus: 2,
@@ -615,7 +667,8 @@ fn the_nvidia_notice_claims_no_more_than_the_census_shows() {
         ..pci(0x8086, 0x2725, 0x02)
     };
     let intel = pci(0x8086, 0x46a6, 0x03);
-    let pascal = pci(0x10de, 0x1b80, 0x03);
+    // A GT 1030 (GP108): an NVIDIA GPU Stela does not drive.
+    let pascal = pci(0x10de, 0x1d01, 0x03);
     // A supported NVIDIA GPU answers: nothing to say, empty ports or not.
     assert_eq!(
         nvidia_notice(&[pci(0x10de, 0x2c02, 0x03), port(2)]),
@@ -623,6 +676,11 @@ fn the_nvidia_notice_claims_no_more_than_the_census_shows() {
     );
     assert_eq!(
         nvidia_notice(&[pascal, pci(0x10de, 0x2c02, 0x03)]),
+        NvidiaNotice::Driven
+    );
+    // A GTX 1080 is one.
+    assert_eq!(
+        nvidia_notice(&[pci(0x10de, 0x1b80, 0x03), port(2)]),
         NvidiaNotice::Driven
     );
     // Every port has something below it: what the census shows is final.
