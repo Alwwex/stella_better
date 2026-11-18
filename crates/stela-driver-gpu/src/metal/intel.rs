@@ -134,6 +134,8 @@ pub const DRIVER: super::native::Driver = {
         submit_thread: None,
         refusals: None,
         keep_lost: false,
+        // ANV reports `shaderFloat16` on every GPU it drives here.
+        float16_lowered: false,
     }
 };
 

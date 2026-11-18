@@ -227,9 +227,10 @@ impl fmt::Display for Missed {
 /// HDMI-A, HDMI-B) and as DisplayPort (DP, eDP).
 const TMDS_PORTS: [u32; 4] = [2, 3, 11, 12];
 const DP_PORTS: [u32; 2] = [10, 14];
-/// nouveau's limits from Turing on (`get_tmds_link_bandwidth`) and the
-/// most its DisplayPort trains: 4 lanes of HBR3, 810000 kilobytes a second
-/// each, checked at 6 bits a colour (`nv50_dp_mode_valid`).
+/// nouveau's limits from GM200 on, Pascal's and Turing's alike
+/// (`get_tmds_link_bandwidth`), and the most its DisplayPort trains: 4 lanes
+/// of HBR3, 810000 kilobytes a second each, checked at 6 bits a colour
+/// (`nv50_dp_mode_valid`).
 const SCRAMBLED_TMDS: u32 = 594_000;
 const PLAIN_TMDS: u32 = 340_000;
 const SINGLE_LINK_TMDS: u32 = 165_000;

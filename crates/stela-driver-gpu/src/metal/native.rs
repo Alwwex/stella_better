@@ -92,6 +92,10 @@ pub struct Loader {
     /// driver's recovery from the hang, which may never end. Its open waits
     /// for a first submission before the device is served.
     pub keep_lost: bool,
+    /// The driver's compiler computes 16-bit float arithmetic in 32 bits
+    /// where the device reports no `shaderFloat16`
+    /// (`Features::shader_float16_lowered`).
+    pub float16_lowered: bool,
     /// Waits a moment, as the platform's waits do: a call outside the
     /// service's turn may wait for the boot processor.
     pub relax: fn(),
@@ -115,6 +119,10 @@ pub struct Driver {
     pub refusals: Option<Refusals>,
     /// [`Loader::keep_lost`].
     pub keep_lost: bool,
+    /// Whether the driver's compiler takes 16-bit float arithmetic in the
+    /// NIR it is given on a device that reports no `shaderFloat16`, computing
+    /// it in 32 bits ([`Loader::float16_lowered`]).
+    pub float16_lowered: bool,
 }
 
 impl Driver {
@@ -126,6 +134,7 @@ impl Driver {
             submit_thread: self.submit_thread,
             refusals: self.refusals,
             keep_lost: self.keep_lost,
+            float16_lowered: self.float16_lowered,
             relax,
         }
     }
@@ -724,10 +733,19 @@ impl NativeBackend {
             instance.destroy_instance(None);
         };
         let selected = Self::select(&instance, pci, loader.log);
-        let Some((physical, extensions, snapshot, family)) = selected else {
+        let Some((physical, extensions, mut snapshot, family)) = selected else {
             destroy_instance(&instance);
             return Err(Error::Unsupported("Vulkan device of the GPU"));
         };
+        // A Pascal GPU under NVK has no 16-bit float arithmetic of its own:
+        // NAK computes Metal's `half` in 32 bits, rounding each result back.
+        snapshot.features.shader_float16_lowered = loader.float16_lowered;
+        if loader.float16_lowered && !snapshot.features.shader_float16 {
+            (loader.log)(
+                "shaderFloat16 is off: the driver's compiler computes 16-bit float arithmetic \
+                 in 32 bits, rounding each result to 16 bits",
+            );
+        }
         if let Some(missing) = requirements(&snapshot.features)
             .iter()
             .find(|requirement| !requirement.present)
@@ -795,7 +813,6 @@ impl NativeBackend {
         if let Some(note) = small_bar(&snapshot.memory) {
             (loader.log)(&note);
         }
-        let mut snapshot = snapshot;
         if fns.generated.is_none() {
             snapshot.limits.generated_commands = None;
         }

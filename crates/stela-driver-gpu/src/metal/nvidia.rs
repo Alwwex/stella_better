@@ -1,5 +1,6 @@
-//! NVIDIA GPUs under Stela's Metal device: nouveau with GSP firmware in the
-//! kernel and NVK as the Vulkan driver.
+//! NVIDIA GPUs under Stela's Metal device: nouveau in the kernel, with GSP
+//! firmware from Turing on and its own engines on Pascal, and NVK as the
+//! Vulkan driver.
 //!
 //! Hardware access, firmware, memory management, command submission and
 //! shader code generation stay with nouveau, NVK and NAK; this module only
@@ -15,7 +16,7 @@ use alloc::string::String;
 
 pub const VENDOR_ID: u32 = 0x10de;
 
-pub use crate::nouveau_chip::{Architecture, CHIPS, Chip};
+pub use crate::nouveau_chip::{Architecture, CHIPS, Chip, PASCAL};
 
 /// The first Turing chipset; nouveau's card type for 0x160-0x16f is TU100.
 const FIRST_GSP_CHIPSET: u16 = 0x160;
@@ -28,7 +29,9 @@ pub enum Refusal {
     },
     /// Only NVK is integrated with Stela's nouveau winsys.
     NotNvk(DriverId),
-    /// Chips before Turing have no GSP firmware path.
+    /// A chip before Turing other than the Pascal chips of [`PASCAL`]:
+    /// Kepler, Maxwell, GP100, GP108 and Volta, whose firmware Stela pins
+    /// no boot for.
     PreTuring {
         chipset: u16,
     },
@@ -55,7 +58,7 @@ impl Chip {
         if identity.device_type != PhysicalDeviceType::DiscreteGpu {
             return Err(Refusal::NotDiscrete(identity.device_type));
         }
-        if chipset < FIRST_GSP_CHIPSET {
+        if chipset < FIRST_GSP_CHIPSET && !PASCAL.iter().any(|chip| chip.chipset == chipset) {
             return Err(Refusal::PreTuring { chipset });
         }
         Self::find(chipset).ok_or(Refusal::UnknownChipset { chipset })
@@ -95,7 +98,7 @@ impl Chip {
 }
 
 /// The NVIDIA stack's admission: nouveau's chipset must be one of [`CHIPS`]
-/// and the Vulkan device NVK's.
+/// or [`PASCAL`] and the Vulkan device NVK's.
 pub const ADMISSION: Admission = Admission { admit };
 
 fn admit(
@@ -144,6 +147,10 @@ pub const DRIVER: super::native::Driver = {
             count: stela_nvk_count_failures,
         }),
         keep_lost: false,
+        // NAK lowers each 16-bit float operation the GPU lacks to 32 bits
+        // (`lower_bit_size_cb`): all of them below SM 7.0, where NVK reports
+        // no `shaderFloat16`.
+        float16_lowered: true,
     }
 };
 

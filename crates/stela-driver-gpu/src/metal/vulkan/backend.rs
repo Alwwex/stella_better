@@ -520,7 +520,12 @@ pub fn requirements(features: &Features) -> [Requirement; 19] {
         requirement("bufferDeviceAddress", features.buffer_device_address),
         requirement("timelineSemaphore", features.timeline_semaphore),
         requirement("synchronization2", features.synchronization2),
-        requirement("shaderFloat16", features.shader_float16),
+        // Metal's `half`: the GPU's own 16-bit arithmetic, or the driver's
+        // compiler computing it in 32 bits where the GPU has none.
+        requirement(
+            "shaderFloat16",
+            features.shader_float16 || features.shader_float16_lowered,
+        ),
         requirement("dynamicRendering", features.dynamic_rendering),
         requirement(
             "descriptorIndexing",

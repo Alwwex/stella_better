@@ -1,5 +1,7 @@
-//! Test snapshots modeled on what NVK (Mesa 26.2.5) reports for Turing and
-//! later classes in `nvk_physical_device.c` and `nvk_image.c`.
+//! Test snapshots modeled on what NVK (Mesa 26.2.5) reports for Pascal B,
+//! Turing and later classes in `nvk_physical_device.c` and `nvk_image.c`,
+//! with what the native backend adds from NVK's driver entry
+//! (`shader_float16_lowered`).
 //!
 //! These are fixtures for the derivation code, not a substitute for the
 //! runtime query: format support is simplified to NVK's broad rules
@@ -49,13 +51,17 @@ pub(crate) fn capabilities() -> Capabilities {
 }
 
 pub(crate) fn nvk(chip: &Chip, vram: u64) -> PhysicalDevice {
+    // NVK reports Vulkan 1.4 only with `hostImageCopy`, which is Turing's
+    // (`nvk_get_vk_version`).
+    let pascal = chip.architecture == Architecture::Pascal;
     PhysicalDevice {
         identity: Identity {
-            api_version: (1 << 22) | (4 << 12),
+            api_version: (1 << 22) | (if pascal { 3 } else { 4 } << 12),
             driver_id: DriverId::MesaNvk,
             driver_version: 0,
             vendor_id: super::VENDOR_ID,
-            device_id: 0x2c05,
+            // A GTX 1080, or an RTX 5080.
+            device_id: if pascal { 0x1b80 } else { 0x2c05 },
             pipeline_cache_uuid: [0x5a; 16],
             device_type: PhysicalDeviceType::DiscreteGpu,
             device_name: String::from("NVIDIA test GPU"),
@@ -71,7 +77,7 @@ pub(crate) fn nvk(chip: &Chip, vram: u64) -> PhysicalDevice {
                 function: 0,
             }),
         },
-        limits: limits(),
+        limits: limits(chip),
         features: features(chip),
         memory: Memory {
             heaps: vec![
@@ -109,7 +115,11 @@ pub(crate) fn nvk(chip: &Chip, vram: u64) -> PhysicalDevice {
     }
 }
 
-fn limits() -> Limits {
+/// The same on Pascal B but for mesh shaders, which are Turing's: its 2D
+/// images are 32768 texels as Turing's (`nvk_image_max_dimension`), its
+/// shared memory NVK's 48 KiB, and its sample locations and generated
+/// commands Maxwell B's.
+fn limits(chip: &Chip) -> Limits {
     Limits {
         max_image_dimension_1d: 0x8000,
         max_image_dimension_2d: 0x8000,
@@ -199,7 +209,7 @@ fn limits() -> Limits {
             sub_pixel_bits: 4,
             variable_sample_locations: true,
         }),
-        mesh: Some(MeshLimits {
+        mesh: (chip.architecture != Architecture::Pascal).then_some(MeshLimits {
             max_task_work_group_total_count: 1 << 22,
             max_task_work_group_count: [1 << 22, 65535, 65535],
             max_task_work_group_invocations: 128,
@@ -231,8 +241,14 @@ fn limits() -> Limits {
 }
 
 /// NVK keys these on the 3D class, and every Turing and later class has
-/// them; only TU11x lacks cooperative matrices.
+/// them; only TU11x lacks cooperative matrices. Pascal B (SM 6.1) lacks
+/// what NVK gives Volta (`shaderResourceResidency`, `shaderResourceMinLod`),
+/// Turing (`hostImageCopy`, mesh and task shaders, barycentrics,
+/// cooperative matrices, 16-bit float vector atomics) and SM 7.0
+/// (`shaderFloat16`), and has what NVK gives Maxwell B: sparse residency,
+/// min/max filtering and, with Stela's patches, fragment shader interlock.
 fn features(chip: &Chip) -> Features {
+    let turing = chip.architecture >= Architecture::Turing;
     Features {
         image_cube_array: true,
         independent_blend: true,
@@ -264,10 +280,11 @@ fn features(chip: &Chip) -> Features {
         shader_float64: true,
         shader_int64: true,
         shader_int16: true,
-        shader_float16: true,
+        shader_float16: turing,
+        shader_float16_lowered: true,
         shader_int8: true,
-        shader_resource_residency: true,
-        shader_resource_min_lod: true,
+        shader_resource_residency: turing,
+        shader_resource_min_lod: turing,
         sparse_binding: true,
         sparse_residency_buffer: true,
         sparse_residency_image_2d: true,
@@ -308,7 +325,7 @@ fn features(chip: &Chip) -> Features {
         maintenance4: true,
         maintenance5: true,
         maintenance8: true,
-        host_image_copy: true,
+        host_image_copy: turing,
         extended_dynamic_state: true,
         extended_dynamic_state2: true,
         extended_dynamic_state3_polygon_mode: true,
@@ -320,9 +337,9 @@ fn features(chip: &Chip) -> Features {
         bresenham_lines: true,
         rectangular_lines: true,
         image_view_min_lod: true,
-        fragment_shader_barycentric: true,
-        task_shader: true,
-        mesh_shader: true,
+        fragment_shader_barycentric: turing,
+        task_shader: turing,
+        mesh_shader: turing,
         // NVK's fragment shader interlock (Mesa's patch series).
         fragment_shader_pixel_interlock: true,
         unified_image_layouts: true,
@@ -332,10 +349,10 @@ fn features(chip: &Chip) -> Features {
         host_query_reset: true,
         conditional_rendering: true,
         image_drm_format_modifier: true,
-        shader_float16_vector_atomics: true,
+        shader_float16_vector_atomics: turing,
         memory_budget: true,
         calibrated_timestamps: true,
-        cooperative_matrix: chip.chipset != 0x167 && chip.chipset != 0x168,
+        cooperative_matrix: turing && chip.chipset != 0x167 && chip.chipset != 0x168,
         ..Features::default()
     }
 }

@@ -109,7 +109,7 @@ pub static STACKS: &[&GpuStack] = &[
     &INTEL,
 ];
 
-/// nouveau with GSP firmware, NVK and NAK.
+/// nouveau (with GSP firmware from Turing on), NVK and NAK.
 pub static NVIDIA: GpuStack = GpuStack {
     vendor: Vendor::Nvidia,
     kernel: Kernel {
@@ -118,8 +118,9 @@ pub static NVIDIA: GpuStack = GpuStack {
         // with a chip it does not know is its probe's answer.
         admits: |_| Ok(()),
         registers: 0,
-        // The Turing-and-later MMUs' `dma_bits` (`nvkm/subdev/mmu/tu102.c`
-        // 47, `gh100.c` 52), which `nvkm_device_pci_new` sets as the mask.
+        // The Pascal-and-later MMUs' `dma_bits` (`nvkm/subdev/mmu/gp100.c`
+        // and `tu102.c` 47, `gh100.c` 52), which `nvkm_device_pci_new` sets
+        // as the mask.
         dma_bits: |_| 47,
         // nouveau drives discrete GPUs only (`nvkm_device_pci_new`); Tegra's
         // built-in GPUs are platform devices, not PCI functions.

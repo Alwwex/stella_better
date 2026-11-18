@@ -148,6 +148,8 @@ pub const DRIVER: super::native::Driver = {
         // amdgpu's recovery from a hung GPU holds back the VM work closing
         // RADV's file waits for.
         keep_lost: true,
+        // RADV reports `shaderFloat16` on every GPU it drives here.
+        float16_lowered: false,
     }
 };
 

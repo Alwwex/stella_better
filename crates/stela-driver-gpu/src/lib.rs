@@ -107,7 +107,7 @@ impl Adapter {
     /// Every discovered adapter remains unbound until a real port exists.
     pub fn unavailable_reason(&self) -> &'static str {
         match self.vendor {
-            Vendor::Nvidia => "NVIDIA requires nouveau/GSP binding and an NVK-enabled image",
+            Vendor::Nvidia => "NVIDIA requires nouveau binding and an NVK-enabled image",
             Vendor::Amd => "AMDGPU is not ported to Stela",
             Vendor::Intel => {
                 "it needs Linux's i915 driver, which Stela does not have: its xe driver runs \

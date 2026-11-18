@@ -319,6 +319,9 @@ impl FeatureChain {
             shader_int64: on(core.shader_int64),
             shader_int16: on(core.shader_int16),
             shader_float16: on(v12.shader_float16),
+            // The driver's compiler, not the device, answers this: the
+            // backend sets it from its loader.
+            shader_float16_lowered: false,
             shader_int8: on(v12.shader_int8),
             shader_resource_residency: on(core.shader_resource_residency),
             shader_resource_min_lod: on(core.shader_resource_min_lod),

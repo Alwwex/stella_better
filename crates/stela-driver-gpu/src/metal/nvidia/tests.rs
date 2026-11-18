@@ -65,10 +65,17 @@ fn admission_requires_an_nvk_discrete_gsp_chip() {
     let chip = Chip::find(0x1b3).unwrap();
     let identity = nvk(chip, 16 << 30).identity;
     assert_eq!(Chip::admit(&identity, 0x1b3), Ok(chip));
-    assert_eq!(
-        Chip::admit(&identity, 0x140),
-        Err(Refusal::PreTuring { chipset: 0x140 })
-    );
+    // The GTX 1080's GP104 and its GeForce 10 siblings.
+    for pascal in &PASCAL {
+        assert_eq!(Chip::admit(&identity, pascal.chipset), Ok(pascal));
+    }
+    // Volta, GP108, GP100 and Maxwell have no pinned boot.
+    for chipset in [0x140, 0x138, 0x130, 0x124] {
+        assert_eq!(
+            Chip::admit(&identity, chipset),
+            Err(Refusal::PreTuring { chipset })
+        );
+    }
     assert_eq!(
         Chip::admit(&identity, 0x169),
         Err(Refusal::UnknownChipset { chipset: 0x169 })
@@ -190,6 +197,84 @@ fn every_turing_and_later_chip_derives_the_same_metal_profile() {
         assert_eq!(capabilities.limits.max_buffer_length, 1 << 31);
         assert_eq!(capabilities.limits.max_texture_dimension_2d, 32768);
         assert_eq!(capabilities.headless, !chip.display);
+    }
+}
+
+#[test]
+fn a_pascal_gpu_is_admitted_with_the_families_its_hardware_reaches() {
+    for chip in &PASCAL {
+        let device = nvk(chip, 8 << 30);
+        // SM 6.1 has no `shaderFloat16`; NAK's 32-bit lowering stands in.
+        assert!(!device.features.shader_float16);
+        assert!(device.features.shader_float16_lowered);
+        let missing: alloc::vec::Vec<_> =
+            crate::metal::vulkan::backend::requirements(&device.features)
+                .into_iter()
+                .filter(|requirement| !requirement.present)
+                .map(|requirement| requirement.name)
+                .collect();
+        assert!(missing.is_empty(), "{}: {missing:?}", chip.name);
+        // Without the lowering the device is refused for `half`.
+        let mut unlowered = device.features;
+        unlowered.shader_float16_lowered = false;
+        assert!(
+            crate::metal::vulkan::backend::requirements(&unlowered)
+                .iter()
+                .any(|requirement| requirement.name == "shaderFloat16" && !requirement.present)
+        );
+
+        let capabilities = complete(chip);
+        // Framebuffer reads (fragment shader interlock, Maxwell B's) keep
+        // Apple3, which Core Animation needs of WindowServer's surfaces.
+        // Apple6 needs sparse residency feedback (Volta's), Metal3 mesh
+        // shaders (Turing's), and Apple7 both and barycentrics (Turing's).
+        assert_eq!(
+            capabilities.families(),
+            [
+                GpuFamily::Apple1,
+                GpuFamily::Apple2,
+                GpuFamily::Apple3,
+                GpuFamily::Apple4,
+                GpuFamily::Apple5,
+                GpuFamily::Common1,
+                GpuFamily::Common2,
+                GpuFamily::Common3,
+                GpuFamily::Mac1,
+                GpuFamily::Mac2,
+                GpuFamily::MacCatalyst1,
+                GpuFamily::MacCatalyst2,
+            ],
+            "{}",
+            chip.name
+        );
+        for family in [GpuFamily::Apple6, GpuFamily::Apple7, GpuFamily::Metal3] {
+            assert!(!capabilities.supports_family(family), "{family:?}");
+        }
+        let cause = |name: &str| {
+            capabilities
+                .gaps()
+                .iter()
+                .find(|gap| gap.capability == name)
+                .map(|gap| gap.cause)
+        };
+        for gap in [
+            "mesh shaders",
+            "shader barycentric coordinates",
+            "sparse residency feedback",
+        ] {
+            assert_eq!(cause(gap), Some(Cause::Driver), "{}: {gap}", chip.name);
+        }
+        assert_eq!(
+            capabilities.argument_buffers_tier,
+            ArgumentBuffersTier::Tier2
+        );
+        assert_eq!(
+            capabilities.read_write_texture_tier,
+            ReadWriteTextureTier::Tier2
+        );
+        assert_eq!(capabilities.limits.max_threadgroup_memory_length, 48 << 10);
+        assert_eq!(capabilities.limits.max_texture_dimension_2d, 32768);
+        assert!(!capabilities.headless);
     }
 }
 

@@ -229,6 +229,13 @@ pub struct Features {
     pub shader_int64: bool,
     pub shader_int16: bool,
     pub shader_float16: bool,
+    /// Not a Vulkan feature: the driver's compiler takes 16-bit float
+    /// arithmetic in the NIR it is given though `shaderFloat16` is off, and
+    /// computes it in 32 bits, rounding each result to 16 (NAK below SM 7.0,
+    /// so on Pascal: `lower_bit_size_cb` in `nak_nir.c`). The AIR compiler's
+    /// `half` arithmetic needs nothing more. The native backend sets it from
+    /// its driver's `float16_lowered`.
+    pub shader_float16_lowered: bool,
     pub shader_int8: bool,
     pub shader_resource_residency: bool,
     pub shader_resource_min_lod: bool,

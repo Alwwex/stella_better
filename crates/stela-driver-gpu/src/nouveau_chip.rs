@@ -1,11 +1,18 @@
 //! Discrete NVIDIA chipset identity shared by boot and the NVK device path.
-//! The table follows nouveau's `nvkm_device_ctor` in
-//! `drivers/gpu/drm/nouveau/nvkm/engine/device/base.c` (Linux v7.2.12)
-//! for the GSP-RM chipsets starting at Turing.
+//! The tables follow nouveau's `nvkm_device_ctor` in
+//! `drivers/gpu/drm/nouveau/nvkm/engine/device/base.c` (Linux v7.2.12):
+//! [`CHIPS`] for the GSP-RM chipsets starting at Turing, and [`PASCAL`] for
+//! the GeForce 10 series chipsets nouveau boots without GSP-RM.
 
 /// The GPU generation, which fixes NVK's 3D class and NAK's shader model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Architecture {
+    /// GP102 to GP107: no GSP. nouveau runs the VBIOS's devinit on the PMU
+    /// itself when the GPU is not posted, and boots the graphics falcons
+    /// with linux-firmware's signed images through the ACR on SEC2
+    /// (`nvkm/subdev/acr/gp102.c`). It has no clock control on these chips,
+    /// so they stay at the clocks the VBIOS boots them with.
+    Pascal,
     Turing,
     Ampere,
     Ada,
@@ -34,7 +41,7 @@ const fn chip(chipset: u16, name: &'static str, architecture: Architecture, disp
     }
 }
 
-use Architecture::{Ada, Ampere, Blackwell, Hopper, Turing};
+use Architecture::{Ada, Ampere, Blackwell, Hopper, Pascal, Turing};
 
 /// nouveau's Turing and later chipsets; GA100, GH100, GB100 and GB102 are
 /// compute parts without a display engine.
@@ -65,9 +72,37 @@ pub static CHIPS: [Chip; 24] = [
     chip(0x1b7, "GB207", Blackwell, true),
 ];
 
+/// nouveau's GeForce 10 series chipsets that share GP102's secure boot: the
+/// ACR and SEC2 of `gp102_acr_new` and `gp102_sec2_new`, with each chip's own
+/// graphics firmware. GP104 is the GTX 1070 and 1080, GP102 the GTX 1080 Ti
+/// and Titan X/Xp, GP106 the GTX 1060 and GP107 the GTX 1050. GP100 (ACR on
+/// the PMU) and GP108 (`gp108_acr_new`) boot differently and are not here.
+/// A separate table, so [`CHIPS`] stays the GSP-RM list it always was.
+pub static PASCAL: [Chip; 4] = [
+    chip(0x132, "GP102", Pascal, true),
+    chip(0x134, "GP104", Pascal, true),
+    chip(0x136, "GP106", Pascal, true),
+    chip(0x137, "GP107", Pascal, true),
+];
+
 impl Chip {
     pub fn find(chipset: u16) -> Option<&'static Chip> {
-        CHIPS.iter().find(|chip| chip.chipset == chipset)
+        CHIPS
+            .iter()
+            .chain(PASCAL.iter())
+            .find(|chip| chip.chipset == chipset)
+    }
+
+    /// Every chipset Stela drives: [`PASCAL`], then [`CHIPS`].
+    pub fn all() -> impl Iterator<Item = &'static Chip> {
+        PASCAL.iter().chain(CHIPS.iter())
+    }
+
+    /// nouveau boots this chipset through GSP-RM (`nvkm/subdev/gsp`): every
+    /// chip from Turing on. A Pascal GPU runs nouveau's own engines instead,
+    /// with no GSP-RM to report its performance state or to unload.
+    pub fn uses_gsp(&self) -> bool {
+        self.architecture != Pascal
     }
 
     /// Decode the little-endian PMC_BOOT_0 of the actual register BAR.
@@ -198,13 +233,42 @@ mod tests {
 
     #[test]
     fn boot0_selects_the_silicon_chipset_independently_of_revision() {
-        for chip in CHIPS {
+        for chip in Chip::all() {
             let field = u32::from(chip.chipset) << 20;
-            assert_eq!(Chip::from_boot0(field | 0x91), Some(&chip));
-            assert_eq!(Chip::from_boot0(field | 0xa1), Some(&chip));
+            assert_eq!(Chip::from_boot0(field | 0x91), Some(chip));
+            assert_eq!(Chip::from_boot0(field | 0xa1), Some(chip));
         }
+        // A GTX 1080's BOOT_0 (GP104, revision A1).
+        assert_eq!(
+            Chip::from_boot0(0x1340_00a1).map(|chip| chip.name),
+            Some("GP104")
+        );
         assert_eq!(Chip::from_boot0(u32::MAX), None);
         assert_eq!(Chip::from_boot0(0), None);
+    }
+
+    #[test]
+    fn the_pascal_table_is_nouveaus_gp102_secure_boot_chips() {
+        assert!(
+            PASCAL
+                .windows(2)
+                .all(|pair| pair[0].chipset < pair[1].chipset)
+        );
+        assert!(
+            PASCAL
+                .iter()
+                .all(|chip| chip.architecture == Pascal && chip.display && !chip.uses_gsp())
+        );
+        assert!(CHIPS.iter().all(Chip::uses_gsp));
+        // Every chipset once across both tables.
+        let mut chipsets: alloc::vec::Vec<u16> = Chip::all().map(|chip| chip.chipset).collect();
+        chipsets.sort_unstable();
+        chipsets.dedup();
+        assert_eq!(chipsets.len(), CHIPS.len() + PASCAL.len());
+        // GP100, GP108 and Volta boot another way and are not driven.
+        for chipset in [0x130, 0x138, 0x13b, 0x140] {
+            assert_eq!(Chip::find(chipset), None, "{chipset:#x}");
+        }
     }
 
     #[test]
@@ -214,6 +278,9 @@ mod tests {
         assert!(waits(0x167) && waits(0x174) && waits(0x197));
         // GH100 and GB203 (RTX 5080) have no devinit subdev.
         assert!(!waits(0x180) && !waits(0x1b3));
+        // nouveau posts a Pascal GPU itself (`gm200_devinit_post`): nothing
+        // of the GPU boots by itself after a reset.
+        assert!(PASCAL.iter().all(|chip| !chip.waits_for_firmware_boot()));
     }
 
     #[test]
