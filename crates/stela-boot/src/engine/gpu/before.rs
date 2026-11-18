@@ -78,8 +78,11 @@ pub(super) fn of(stack: &GpuStack) -> Option<&'static Before> {
     }
 }
 
-/// nouveau: the chip is `PMC_BOOT_0`'s, its GSP-RM files are that chip's, and
-/// a Turing-to-Ada GPU's own firmware must have booted again after the reset.
+/// nouveau: the chip is `PMC_BOOT_0`'s, its files are that chip's (GSP-RM's
+/// from Turing on, the ACR, SEC2 and graphics firmware on Pascal), and a
+/// Turing-to-Ada GPU's own firmware must have booted again after the reset.
+/// Nothing of a Pascal GPU boots by itself after its reset: nouveau finds it
+/// unposted and runs its VBIOS's devinit on the PMU (`gm200_devinit_post`).
 static NOUVEAU: Before = Before {
     // Its files are the chip's, which only its registers name.
     admits: |_, _| Ok(()),
@@ -97,8 +100,16 @@ static NOUVEAU: Before = Before {
         ))?;
         let name = chip.name.to_ascii_lowercase();
         let mut inventory = Inventory::default();
-        stela_loader::host_firmware::recipes::require_gsp(&mut inventory, &name)
-            .map_err(|_| ServiceError::Refused("the GPU has no pinned GSP recipe"))?;
+        stela_loader::host_firmware::recipes::require_nouveau(&mut inventory, &name)
+            .map_err(|_| ServiceError::Refused("the GPU has no pinned nouveau firmware recipe"))?;
+        if !chip.uses_gsp() {
+            output::arguments(format_args!(
+                "GPU {}: Pascal, without GSP-RM: nouveau posts the GPU from its VBIOS after \
+                 the reset, starts its graphics engines with linux-firmware's signed images \
+                 through the ACR on SEC2, and cannot reclock it, so it keeps its boot clocks\n",
+                chip.name
+            ));
+        }
         Ok(Identified {
             firmware: select_firmware(&inventory, &name, catalog, None)?,
             identity: Some(boot0),
