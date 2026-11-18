@@ -244,6 +244,46 @@ Where it can go wrong, and what that looks like:
 | nouveau `acr`, `sec2` or `gr` errors | The signed firmware did not boot. Include the full log in a report. |
 | A `VULKAN DEVICE` line, then the Metal device refused for a Vulkan feature it names | A Metal requirement NVK does not meet on Pascal. |
 
+## Performance
+
+macOS for Apple silicon will not run at native speed here, for three
+reasons. Every ARM instruction is translated to x86-64; Stela keeps what it
+translated in a store on the stick (1 GiB by default), so the first boots
+are the slowest. The GTX 1080 keeps its boot clocks, because nouveau cannot
+reclock Pascal without signed firmware NVIDIA never released. And every
+Metal call passes through Vulkan.
+
+What helps on a GTX 1080, whose memory bandwidth is the scarce part:
+
+- Run the display at its native resolution, or at 1920×1080, and avoid
+  macOS's scaled "Looks like" modes, which draw at twice the size and then
+  scale down.
+- In System Settings, Accessibility, Display, turn on **Reduce
+  transparency** and **Reduce motion**: macOS's translucent, blurred
+  surfaces read and write the whole screen several times a frame.
+
+To see where the time goes, turn the engine profile on for the stick, boot,
+and save the log. Each heartbeat then reports the engine's time by phase and
+exit kind, and the GPU's pass timings:
+
+```sh
+sudo ./target/release/stela settings --profile on
+```
+
+On Windows, run `stela.exe settings --profile on` in an administrator
+Terminal. `--profile off` turns it off again.
+
+Upstream Stela gets faster almost daily: its main branch had 156
+performance commits in the week this fork was made. Merging it keeps those
+coming. Its unmerged performance branches were either merged in another
+form or not yet proven on a real boot, so this fork does not carry them.
+
+A Pascal-only optimization worth measuring first: NAK computes each `half`
+operation in 32 bits and rounds it back, so a chain of them converts between
+every step. Metal compiles with fast math by default, which would allow
+keeping the chain in 32 bits. That changes numerical results, so it waits
+for a profile showing shader time matters.
+
 ## Known risks
 
 - This path has never run on Pascal hardware inside Stela. nouveau's
