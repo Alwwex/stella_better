@@ -85,15 +85,41 @@ fails, and they would cost three more firmware handoff slots on every boot.
 
 You need what upstream Stela needs: [Rust](https://rustup.rs), git,
 Python 3.10 or newer, and LLVM 21, 22 or 23 with Clang, LLD and libclang.
+Upstream builds the boot image on Ubuntu 24.04 with LLVM 21 from
+apt.llvm.org; on Windows, use WSL2 with Ubuntu 24.04.
+
+**`clang` itself must be on PATH**, or named by the `CLANG` variable. The
+first thing `cargo xtask` compiles is Mbed TLS, with `clang`, before its own
+check of the toolchain runs. Without it the build stops at once with
+`failed to find tool "clang": program not found`. Ubuntu's packages install
+`clang-21` and keep plain `clang` in `/usr/lib/llvm-21/bin`, so that
+directory goes on PATH. On Ubuntu:
+
+```sh
+sudo apt-get install -y curl git python3 lsb-release
+curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-21 main" | sudo tee /etc/apt/sources.list.d/llvm-21.list
+sudo apt-get update
+sudo apt-get install -y clang-21 lld-21 llvm-21 llvm-21-dev libclang-21-dev libclang-cpp21-dev glslang-tools ninja-build
+echo 'export PATH=/usr/lib/llvm-21/bin:$PATH' >> ~/.bashrc
+export PATH=/usr/lib/llvm-21/bin:$PATH
+clang --version
+```
+
+`clang --version` must report version 21 or newer. Then build:
 
 ```sh
 git clone -b claude/upbeat-sagan-3xwf43 https://github.com/Alwwex/stella_better
 cd stella_better
+rustup toolchain install
 cargo xtask dist
 ```
 
-This writes `target/release/stela`. The first build fetches and compiles
-Linux, Mesa and LLVM and takes a long time.
+`rustup toolchain install` installs the Rust release `rust-toolchain.toml`
+pins, with its `llvm-tools` and UEFI target. `cargo xtask dist` checks the rest
+first and lists anything still missing. It writes `target/release/stela`. The
+first build fetches and compiles Linux, Mesa and LLVM: it takes a long time
+and tens of GB of disk.
 
 Make the USB stick with the binary you just built. It downloads the firmware
 bundle, Pascal files included:
