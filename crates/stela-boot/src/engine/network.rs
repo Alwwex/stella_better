@@ -31,7 +31,7 @@ use stela_drivers::{
 };
 use stela_runtime::net::{
     Backoff, HttpPost, HttpRequest, HttpTransfer, NetError, Stack, TlsUnavailable, Transfer,
-    stack::DOWNLOAD_BUFFER,
+    census::Census, stack::DOWNLOAD_BUFFER,
 };
 use stela_soc::machine::AppleDevices;
 
@@ -109,25 +109,42 @@ struct RootLink {
 
 /// The frames an adapter took and gave, for the log line of an attempt that
 /// got no address: an adapter with a link that received nothing is told
-/// apart from a network that never answered.
-#[derive(Default)]
+/// apart from a network that never answered, and DHCP replies that came cut
+/// short or corrupted from ones that never came ([`Census`]).
 struct Frames {
     sent: Cell<u64>,
     received: Cell<u64>,
+    census: RefCell<Census>,
 }
 
 impl Frames {
+    fn new(mac: Mac) -> Self {
+        Self {
+            sent: Cell::new(0),
+            received: Cell::new(0),
+            census: RefCell::new(Census::new(mac.0)),
+        }
+    }
     fn count(cell: &Cell<u64>) {
         cell.set(cell.get().saturating_add(1));
+    }
+    fn sent(&self, frame: &[u8]) {
+        Self::count(&self.sent);
+        self.census.borrow_mut().sent(frame);
+    }
+    fn received(&self, frame: &[u8]) {
+        Self::count(&self.received);
+        self.census.borrow_mut().received(frame);
     }
 }
 
 impl RootLink {
     fn new(device: Adapter, root: u64) -> Self {
+        let frames = Rc::new(Frames::new(device.mac()));
         Self {
             device: ManuallyDrop::new(device),
             root,
-            frames: Rc::default(),
+            frames,
         }
     }
 
@@ -147,14 +164,14 @@ impl RootLink {
     fn send(&mut self, frame: &[u8]) -> Result<(), LinkError> {
         self.device
             .transmit(frame)
-            .inspect(|()| Frames::count(&self.frames.sent))
+            .inspect(|()| self.frames.sent(frame))
     }
 
     /// The adapter's next frame, inside the host drivers.
     fn arrived(&mut self) -> Result<Option<Vec<u8>>, LinkError> {
         self.device.receive().inspect(|frame| {
-            if frame.is_some() {
-                Frames::count(&self.frames.received);
+            if let Some(frame) = frame {
+                self.frames.received(frame);
             }
         })
     }
@@ -224,7 +241,7 @@ impl Link for RootLink {
         let _root = unsafe { RestoreRoot::enter(self.root) };
         self.device.receive_reusing(frame).inspect(|&received| {
             if received {
-                Frames::count(&self.frames.received);
+                self.frames.received(frame);
             }
         })
     }
@@ -363,6 +380,10 @@ impl HostNetwork {
                         "NETWORK adapter {location} failed: {error}; frames sent={} received={}\n",
                         frames.sent.get(),
                         frames.received.get()
+                    ));
+                    output::arguments(format_args!(
+                        "NETWORK adapter {location} frames {}\n",
+                        frames.census.borrow()
                     ));
                     // What the adapter's own registers and rings say then,
                     // where its driver keeps them: a dead receive or

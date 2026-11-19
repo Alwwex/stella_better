@@ -11,6 +11,7 @@ use alloc::string::String;
 use core::fmt;
 use stela_drivers::net::LinkError;
 
+pub mod census;
 pub mod facts;
 pub mod http;
 pub mod ranges;
