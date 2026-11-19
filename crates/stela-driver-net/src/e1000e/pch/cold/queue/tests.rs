@@ -76,10 +76,16 @@ fn open(controller: Controller<Io, Timer>, memory: &mut Memory) -> Net {
     // SAFETY: the synchronous model's same native CPU RAM grant.
     unsafe { Ethernet::new(controller, memory) }.unwrap()
 }
+/// The FCS a frame carries on the wire, which the MAC strips (RCTL.SECRC).
+const WIRE_FCS: usize = 4;
+/// A frame of `length` wire bytes, FCS included, as the MAC writes it back:
+/// its descriptor gives the length without the stripped FCS.
 fn inject(net: &mut Net, index: usize, status: u32, length: usize, fill: u8) {
     net.receive.buffer(index).fill(fill);
     let base = index * DESCRIPTOR;
-    net.receive.descriptors.write(base + 12, length as u16);
+    net.receive
+        .descriptors
+        .write(base + 12, length.saturating_sub(WIRE_FCS) as u16);
     fence(Ordering::Release);
     net.receive.descriptors.write(base + 8, status);
 }
@@ -260,7 +266,7 @@ fn native_extended_rx_and_legacy_tx_payloads_wrap_without_offloads() {
             .descriptors
             .write(index * DESCRIPTOR + 12, TX_DONE);
         let index = net.next_rx;
-        inject(&mut net, index, RX_DONE | RX_EOP, size + FCS_BYTES, n as u8);
+        inject(&mut net, index, RX_DONE | RX_EOP, size + WIRE_FCS, n as u8);
         assert_eq!(net.receive().unwrap().unwrap(), frame);
         assert_eq!(
             net.receive.descriptors.read::<u64>(index * DESCRIPTOR),
@@ -274,9 +280,9 @@ fn native_extended_rx_and_legacy_tx_payloads_wrap_without_offloads() {
     let m = state.borrow();
     assert_eq!(m.mac[&RFCTL] & EXTENDED_RX, EXTENDED_RX);
     assert_eq!(
-        m.mac[&super::super::RCTL] & (1 << 26),
-        0,
-        "FCS is retained for software removal"
+        m.mac[&super::super::RCTL] & STRIP_FCS,
+        STRIP_FCS,
+        "the MAC strips the FCS, as Linux's default CrcStripping has it"
     );
     assert_eq!(m.mac[&TXDCTL], m.mac[&(TXDCTL + QUEUE_STRIDE)]);
     assert_eq!(m.phy[&(2, 0, 4)] & ADVERTISEMENT_PAUSE, 0);

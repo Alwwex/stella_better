@@ -3,8 +3,9 @@
 // Copyright (c) 2026 Stela contributors
 //! One polled queue for the declared cold PCH profiles. Native RX follows e1000e's
 //! ordinary-MTU path; TX uses legacy descriptors without offloads. The PHY
-//! jumbo workaround is explicitly restored to its non-jumbo settings. FCS is
-//! received and removed in software as in that source profile. No IRQ, EEE,
+//! jumbo workaround is explicitly restored to its non-jumbo settings. The MAC
+//! strips the FCS (RCTL.SECRC), as Linux's default `CrcStripping` has it, so a
+//! descriptor's length is the frame's. No IRQ, EEE,
 //! pause, VLAN, jumbo, managed firmware or power-transition profile is claimed.
 use super::{Bus, Controller, Delay, Error, Registers, i219, lpt, nvm, spt};
 use crate::{Link, LinkError, MAX_FRAME, MIN_FRAME, Mac, bus::dma::DmaAllocator};
@@ -77,14 +78,19 @@ const EXTENDED_RX: u32 = 1 << 15;
 const VALID_ADDRESS: u32 = 1 << 31;
 const TX_POLICY: u32 = (1 << 24) | (1 << 22) | (1 << 16) | 31;
 const RX_POLICY: u32 = (1 << 16) | (4 << 8) | 8;
-const RECEIVE_POLICY: u32 = ENABLE | (1 << 4) | (1 << 15);
+/// `RCTL.SECRC`: the MAC strips the received FCS, as `e1000_setup_rctl` sets
+/// it after the jumbo workaround with `CrcStripping` on (Linux's default).
+/// Software stripping is not used: a length taken as the frame's plus its
+/// FCS when the MAC has already left the FCS out cuts four bytes from every
+/// frame, which only padded ones (ARP) survive.
+const STRIP_FCS: u32 = 1 << 26;
+const RECEIVE_POLICY: u32 = ENABLE | (1 << 4) | (1 << 15) | STRIP_FCS;
 const TRANSMIT_POLICY: u32 = ENABLE | super::PAD_SHORT | (15 << 4) | (63 << 12) | (1 << 24);
 const RX_DONE: u32 = 1;
 const RX_EOP: u32 = 2;
 const RX_ERRORS: u32 = 0x9700_0000;
 const TX_DONE: u8 = 1;
 const TX_COMMAND: u32 = (1 << 24) | (1 << 25) | (1 << 27);
-const FCS_BYTES: usize = 4;
 const PHY_LINK_READY: u16 = (1 << 2) | (1 << 5);
 const ADVERTISEMENT_SPEED: u16 = 0x1e0;
 const ADVERTISEMENT_PAUSE: u16 = 0xc00;
@@ -297,7 +303,7 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone + 'static> Ethernet<R, D> {
         let old = self.controller.phy.read(reg)?;
         self.controller.phy.write(reg, old | (1 << 14))?;
         self.modify_mac(FFLT_DBG, 0xf << 14, 0)?;
-        self.modify_mac(super::RCTL, 1 << 26, 0)?;
+        self.modify_mac(super::RCTL, STRIP_FCS, 0)?;
         let value = self.kmrn(1, None)?;
         self.kmrn(1, Some(value & !1))?;
         let value = self.kmrn(16, None)?;
@@ -1015,9 +1021,8 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone + 'static> Link for Etherne
             let good = !self.discard_rx
                 && eop
                 && status & RX_ERRORS == 0
-                && (14 + FCS_BYTES..=MAX_FRAME + FCS_BYTES).contains(&length);
+                && (14..=MAX_FRAME).contains(&length);
             if good {
-                let length = length - FCS_BYTES;
                 frame
                     .try_reserve_exact(length.saturating_sub(frame.len()))
                     .map_err(|_| {
