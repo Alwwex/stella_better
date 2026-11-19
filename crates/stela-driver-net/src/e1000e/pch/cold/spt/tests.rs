@@ -238,6 +238,58 @@ fn a_ulp_exit_that_fails_is_noted_and_the_start_goes_on() {
     assert!(!controller.is_poisoned());
     drop(controller);
 }
+/// A PHY that still does not answer its management bus after the ULP
+/// exit's LANPHYPC toggle ends the exit as Linux's `goto release` does,
+/// without poisoning the PHY: Linux logs "Failed to disable ULP" and its
+/// access checks wake the PHY with a second toggle. Before, the exit's MDIO
+/// timeout poisoned the PHY, so those checks found only "an earlier PHY
+/// failure left it unusable" (seen on a CNP I219-V, 8086:15bc).
+#[test]
+fn a_phy_silent_through_the_ulp_exit_is_woken_by_the_access_checks() {
+    for device in [0x15bc, 0x15b8, 0x156f] {
+        let (state, released, io, timer) = fixture_spt();
+        {
+            let mut m = state.borrow_mut();
+            m.phy_asleep = true;
+            m.phy_sleeps_through = 1;
+        }
+        // SAFETY: one synchronous modeled Function/config/PHY/flash.
+        let controller = unsafe { Controller::new_i219(device, io, timer) }.unwrap();
+        assert!(controller.ulp_exit_failed(), "{device:04x}");
+        assert!(!controller.is_poisoned(), "{device:04x}");
+        assert_eq!(controller.identity().id, 0x0154_00a0);
+        {
+            let m = state.borrow();
+            let toggles = m
+                .operations
+                .iter()
+                .filter(|o| {
+                    o[0] == 1 && o[1] == super::super::CTRL && o[2] & LANPHYPC_OVERRIDE != 0
+                })
+                .count();
+            assert_eq!(toggles, 2, "{device:04x}");
+            assert_eq!(m.mac[&CTRL_EXT] & FORCE_SMBUS, 0);
+        }
+        drop(controller);
+        assert_eq!(released.load(Ordering::SeqCst), 1);
+    }
+    // A PHY that sleeps through every toggle is named as such, not as an
+    // earlier failure.
+    let (state, released, io, timer) = fixture_spt();
+    {
+        let mut m = state.borrow_mut();
+        m.phy_asleep = true;
+        m.phy_sleeps_through = usize::MAX;
+    }
+    // SAFETY: as above.
+    let result = unsafe { Controller::new_i219(0x15bc, io, timer) };
+    assert!(
+        matches!(result, Err(Error::PhyInaccessible)),
+        "{:?}",
+        result.err()
+    );
+    assert_eq!(released.load(Ordering::SeqCst), 0);
+}
 #[test]
 fn ulp_mode_switch_recovers_only_the_specific_mdi_transition_and_verifies_state() {
     let (state, released, io, timer) = fixture_spt();

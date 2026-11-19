@@ -225,8 +225,15 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone> Controller<R, D> {
         self.identity = self.phy.identify()?;
         Ok(())
     }
+    /// `e1000_disable_ulp_lpt_lp(hw, true)` for an adapter the ME does not
+    /// manage. A PHY that does not answer its management bus here (an MDIO
+    /// timeout or error response) ends the exit as Linux's `goto release`
+    /// does: the semaphore is released, nothing is poisoned, and the caller
+    /// goes on to the PHY access checks and their own LANPHYPC wake. Only a
+    /// fault of the MAC transport itself (removal, refused access, the
+    /// semaphore, the delay clock) leaves the epoch uncertain and poisons it.
     fn spt_ulp_exit(&mut self) -> Result<(), Error> {
-        let cycle_done = self.phy.transaction(|p| {
+        let exit = self.phy.transaction(|p| {
             let value = p.read_mac(super::FEXTNVM3)?;
             p.write_mac(
                 super::FEXTNVM3,
@@ -249,48 +256,73 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone> Controller<R, D> {
             }
             p.wait_minimum(30_000)?;
             if !done {
-                return Ok(false);
+                return Ok(UlpExit::CycleTimeout);
             }
-            p.retry_enabled = false;
-            // A mode-switch MDIC error is a source-defined transition, not an
-            // access/removal fault. Only the exact CV_SMB_CTRL response may
-            // take this path; final readback must prove PCIe mode.
-            p.page(SMB_CONTROL.page)?;
-            let mut word = match p.mdic(1, SMB_CONTROL.index, None) {
-                Ok(value) => value,
-                Err(error) if smbus_read_unavailable(error) => {
-                    let value = p.read_mac(CTRL_EXT)?;
-                    p.write_mac(CTRL_EXT, value | FORCE_SMBUS)?;
-                    p.wait_minimum(50_000)?;
-                    p.page(SMB_CONTROL.page)?;
-                    p.mdic(1, SMB_CONTROL.index, None)?
+            let retry = p.retry_enabled;
+            let phy = (|| {
+                p.retry_enabled = false;
+                // A mode-switch MDIC error is a source-defined transition, not
+                // an access/removal fault. Only the exact CV_SMB_CTRL response
+                // may take this path; final readback must prove PCIe mode.
+                p.page(SMB_CONTROL.page)?;
+                let mut word = match p.mdic(1, SMB_CONTROL.index, None) {
+                    Ok(value) => value,
+                    Err(error) if smbus_read_unavailable(error) => {
+                        let value = p.read_mac(CTRL_EXT)?;
+                        p.write_mac(CTRL_EXT, value | FORCE_SMBUS)?;
+                        p.wait_minimum(50_000)?;
+                        p.page(SMB_CONTROL.page)?;
+                        p.mdic(1, SMB_CONTROL.index, None)?
+                    }
+                    Err(error) => return Err(error),
+                };
+                let switching = word & 1 != 0;
+                word &= !1;
+                match p.mdic(1, SMB_CONTROL.index, Some(word)) {
+                    Ok(_) => {}
+                    Err(error) if switching && smbus_response_error(error) => {}
+                    Err(error) => return Err(error),
                 }
-                Err(error) => return Err(error),
-            };
-            let switching = word & 1 != 0;
-            word &= !1;
-            match p.mdic(1, SMB_CONTROL.index, Some(word)) {
-                Ok(_) => {}
-                Err(error) if switching && smbus_response_error(error) => {}
-                Err(error) => return Err(error),
+                p.retry_enabled = true;
+                let value = p.read_mac(CTRL_EXT)?;
+                p.write_mac(CTRL_EXT, value & !FORCE_SMBUS)?;
+                let value = p.access(PM_CONTROL, None)?;
+                p.access(PM_CONTROL, Some(value | K1_ENABLE))?;
+                let value = p.access(ULP_CONFIG, None)? & !ULP_CLEAR;
+                p.access(ULP_CONFIG, Some(value))?;
+                p.access(ULP_CONFIG, Some(value | ULP_START))?;
+                let value = p.read_mac(FEXTNVM7)?;
+                p.write_mac(FEXTNVM7, value & !DISABLE_SMB_PERST)?;
+                Ok(())
+            })();
+            match phy {
+                Ok(()) => Ok(UlpExit::Done),
+                // The PHY did not answer: Linux's `goto release`. The MAC
+                // transport is intact, so the access checks that follow may
+                // still wake the PHY.
+                Err(fault @ (Fault::MdicTimeout | Fault::MdicResponse(_))) => {
+                    p.retry_enabled = retry;
+                    Ok(UlpExit::PhySilent(fault))
+                }
+                Err(fault) => Err(fault),
             }
-            p.retry_enabled = true;
-            let value = p.read_mac(CTRL_EXT)?;
-            p.write_mac(CTRL_EXT, value & !FORCE_SMBUS)?;
-            let value = p.access(PM_CONTROL, None)?;
-            p.access(PM_CONTROL, Some(value | K1_ENABLE))?;
-            let value = p.access(ULP_CONFIG, None)? & !ULP_CLEAR;
-            p.access(ULP_CONFIG, Some(value))?;
-            p.access(ULP_CONFIG, Some(value | ULP_START))?;
-            let value = p.read_mac(FEXTNVM7)?;
-            p.write_mac(FEXTNVM7, value & !DISABLE_SMB_PERST)?;
-            Ok(true)
         })?;
-        if !cycle_done {
-            return Err(Error::PowerCycleTimeout);
+        match exit {
+            UlpExit::Done => Ok(()),
+            UlpExit::CycleTimeout => Err(Error::PowerCycleTimeout),
+            UlpExit::PhySilent(fault) => Err(fault.into()),
         }
-        Ok(())
     }
+}
+
+/// How the forced ULP exit of an unmanaged I219 ended, inside its PHY
+/// transaction, so that only a transport fault poisons the access epoch.
+enum UlpExit {
+    Done,
+    /// The LANPHYPC power cycle never reported done.
+    CycleTimeout,
+    /// The PHY did not answer its management bus during the exit.
+    PhySilent(Fault),
 }
 fn smbus_response_error(error: Fault) -> bool {
     let Fault::MdicResponse(response) = error else {

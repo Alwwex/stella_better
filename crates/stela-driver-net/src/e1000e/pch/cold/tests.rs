@@ -22,6 +22,8 @@ pub(super) struct Model {
     /// A PHY in ULP or behind SMBus: no MDIO cycle completes until the
     /// LANPHYPC toggle brings it back.
     pub(super) phy_asleep: bool,
+    /// LANPHYPC toggles a PHY left asleep sleeps through before one wakes it.
+    pub(super) phy_sleeps_through: usize,
     /// An Intel ME that never finishes taking the PHY out of ULP.
     pub(super) me_stuck: bool,
     pub(super) flush_after_tx: bool,
@@ -92,6 +94,7 @@ impl Model {
             smb_stuck: false,
             ulp_stuck: false,
             phy_asleep: false,
+            phy_sleeps_through: 0,
             me_stuck: false,
             flush_after_tx: false,
             flush_after_rx: false,
@@ -120,6 +123,13 @@ impl Model {
             init_missing: false,
             reset_missing: false,
             reset_stuck: false,
+        }
+    }
+    fn lanphypc_wake(&mut self) {
+        if self.phy_asleep && self.phy_sleeps_through > 0 {
+            self.phy_sleeps_through -= 1;
+        } else {
+            self.phy_asleep = false;
         }
     }
     fn enter(&mut self) -> Result<(), Fault> {
@@ -235,7 +245,7 @@ unsafe impl Registers for Io {
             m.did_reset();
         } else if !m.spt && at == CTRL && previous & (1 << 16) != 0 && value & (1 << 16) == 0 {
             // Any PCH's LANPHYPC toggle wakes its PHY.
-            m.phy_asleep = false;
+            m.lanphypc_wake();
             m.mac.insert(at, value);
         } else if at == H2ME && value & H2ME_ENFORCE_SETTINGS != 0 && !m.me_stuck {
             // The ME takes the PHY out of ULP and reports it done.
@@ -245,7 +255,7 @@ unsafe impl Registers for Io {
             m.mac.insert(at, value);
         } else if m.spt && at == CTRL && previous & (1 << 16) != 0 && value & (1 << 16) == 0 {
             m.power_pending = true;
-            m.phy_asleep = false;
+            m.lanphypc_wake();
             if m.smb_hidden_after_power {
                 m.smb_hidden = true;
                 let value = m.phy.get(&(1, 769, 23)).copied().unwrap_or(0) | 1;
