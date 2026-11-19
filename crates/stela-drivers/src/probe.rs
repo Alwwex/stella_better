@@ -382,10 +382,12 @@ impl Adapter {
 }
 
 impl Link for Adapter {
-    /// The driver's own state line, where it keeps one (RTL8168 family).
+    /// The driver's own state line, where it keeps one (RTL8168 family and
+    /// the e1000e PCH adapters: 82579, I217, I218, I219).
     fn diagnostic(&mut self) -> Option<String> {
         match self {
             Self::Realtek(device) => device.diagnostic(),
+            Self::Pch(device) => device.diagnostic(),
             _ => None,
         }
     }

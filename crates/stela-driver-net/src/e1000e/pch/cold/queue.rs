@@ -8,7 +8,7 @@
 //! pause, VLAN, jumbo, managed firmware or power-transition profile is claimed.
 use super::{Bus, Controller, Delay, Error, Registers, i219, lpt, nvm, spt};
 use crate::{Link, LinkError, MAX_FRAME, MIN_FRAME, Mac, bus::dma::DmaAllocator};
-use alloc::{format, rc::Rc, vec::Vec};
+use alloc::{format, rc::Rc, string::String, vec::Vec};
 use core::{
     ops::{Deref, DerefMut},
     sync::atomic::{Ordering, fence},
@@ -98,6 +98,41 @@ const LPI_PLL_SHUT: u16 = 0x4412;
 const EEE_PCS_STATUS: u16 = 0x182e;
 const EEE_ADVERTISEMENT: u16 = 0x040e;
 const LPI_ENABLE: u16 = 0x6000;
+/// The MAC's statistics a failure report shows, as `e1000e_update_stats`
+/// names them. They clear on read.
+const STATISTICS: [(&str, u32); 11] = [
+    ("tpr", 0x40d0),
+    ("gprc", 0x4074),
+    ("bprc", 0x4078),
+    ("mprc", 0x407c),
+    ("mpc", 0x4010),
+    ("rnbc", 0x40a0),
+    ("crcerrs", 0x4000),
+    ("rxerrc", 0x400c),
+    ("ruc", 0x40a4),
+    ("tpt", 0x40d4),
+    ("gptc", 0x4080),
+];
+/// The registers a failure report shows, read without side effects.
+const STATE: [(&str, u32); 9] = [
+    ("status", super::STATUS),
+    ("ctrl", super::CTRL),
+    ("ctrl_ext", CTRL_EXT),
+    ("rctl", super::RCTL),
+    ("tctl", super::TCTL),
+    ("rfctl", RFCTL),
+    ("fwsm", super::super::FWSM),
+    ("pba", PBA),
+    ("extcnf", super::super::EXTCNF_CTRL),
+];
+const RINGS: [(&str, u32); 6] = [
+    ("rdlen", RDLEN),
+    ("rdh", RDH),
+    ("rdt", RDT),
+    ("tdlen", TDLEN),
+    ("tdh", TDH),
+    ("tdt", TDT),
+];
 /// The most one call waits on a link change, ending its step: the change
 /// goes on at the next call.
 const STEP_US: u64 = 40_000;
@@ -832,6 +867,77 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone + 'static> Drop for Etherne
 impl<R: Registers + nvm::Registers, D: Delay + Clone + 'static> Link for Ethernet<R, D> {
     fn mac(&self) -> Mac {
         self.station
+    }
+    /// The adapter's own state for a failure report, with no address in
+    /// it: the driver's ring positions, the MAC's control and ring
+    /// registers, whether the station address is still programmed, the
+    /// PCI command word and the MAC's packet statistics since they were
+    /// last read, so a dead receive or transmit path is told apart from a
+    /// network that does not answer. Nothing here writes the adapter; a
+    /// register that cannot be read is shown as such.
+    fn diagnostic(&mut self) -> Option<String> {
+        use core::fmt::Write;
+        let mut line = format!(
+            "driver rx next={} rx status={:#x} tx next={} clean={} tx status={:#x} \
+             discard={} link={} stopped={} ulp_exit_failed={}",
+            self.next_rx,
+            self.receive
+                .descriptors
+                .read::<u32>(self.next_rx * DESCRIPTOR + 8),
+            self.next_tx,
+            self.clean_tx,
+            self.transmit
+                .descriptors
+                .read::<u8>(self.clean_tx * DESCRIPTOR + 12),
+            self.discard_rx,
+            self.link
+                .map_or_else(|| String::from("none"), |status| format!("{status:#x}")),
+            self.stopped,
+            self.ulp_exit_failed,
+        );
+        if let Some(failure) = &self.failure {
+            let _ = write!(line, " failure=({failure})");
+        }
+        if self.change.is_some() {
+            line.push_str(" registers: held by a PHY link change under way");
+            return Some(line);
+        }
+        let a = self.station.0;
+        let low = u32::from_le_bytes([a[0], a[1], a[2], a[3]]);
+        let high = u32::from(u16::from_le_bytes([a[4], a[5]])) | VALID_ADDRESS;
+        let c = &mut *self.controller;
+        if let Err(error) = c.read(super::STATUS) {
+            let _ = write!(line, " registers unreadable ({error})");
+            return Some(line);
+        }
+        let mut show = |line: &mut String, name: &str, at: u32, hex: bool| {
+            let _ = match c.read(at) {
+                Ok(value) if hex => write!(line, " {name}={value:#010x}"),
+                Ok(value) => write!(line, " {name}={value}"),
+                Err(error) => write!(line, " {name}=({error})"),
+            };
+        };
+        for (name, at) in STATE {
+            show(&mut line, name, at, true);
+        }
+        for (name, at) in RINGS {
+            show(&mut line, name, at, false);
+        }
+        line.push_str(" stats");
+        for (name, at) in STATISTICS {
+            show(&mut line, name, at, false);
+        }
+        let station = c.read(RAL).ok() == Some(low) && c.read(RAH).ok() == Some(high);
+        let _ = write!(
+            line,
+            " station={}",
+            if station { "kept" } else { "differs" }
+        );
+        let _ = match c.config_word(0x04) {
+            Ok(command) => write!(line, " pci_command={command:#06x}"),
+            Err(error) => write!(line, " pci_command=({error})"),
+        };
+        Some(line)
     }
     fn carrier(&mut self) -> bool {
         match self.update_link() {

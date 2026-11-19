@@ -310,6 +310,9 @@ impl Link for Pch {
     fn mac(&self) -> Mac {
         self.link.mac()
     }
+    fn diagnostic(&mut self) -> Option<String> {
+        self.link.diagnostic()
+    }
     fn carrier(&mut self) -> bool {
         self.link.carrier()
     }

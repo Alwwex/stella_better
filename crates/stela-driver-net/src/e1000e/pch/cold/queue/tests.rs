@@ -1780,3 +1780,58 @@ fn an_adapter_without_a_cable_starts_and_reports_no_link() {
         assert_eq!(released.load(Ordering::SeqCst), 1);
     }
 }
+/// The failure report shows the driver's ring positions, the MAC's
+/// registers and statistics, the station address check and the PCI command
+/// word, names no address, and writes nothing to the adapter.
+#[test]
+fn a_failure_report_shows_rings_registers_and_statistics_without_writing() {
+    let (state, released, controller) = setup_spt(0x1570, 0);
+    state.borrow_mut().config.insert(0x04, 0x0406);
+    let mut memory = Memory::new();
+    let mut net = open(controller, &mut memory);
+    assert!(net.carrier());
+    net.transmit(&[0xab; 60]).unwrap();
+    {
+        let mut m = state.borrow_mut();
+        m.mac.insert(0x4074, 7); // GPRC
+        m.mac.insert(0x4010, 3); // MPC
+    }
+    let writes = |state: &Rc<RefCell<Model>>| {
+        state
+            .borrow()
+            .operations
+            .iter()
+            .filter(|o| o[0] == 1)
+            .count()
+    };
+    let before = writes(&state);
+    let line = net.diagnostic().unwrap();
+    assert_eq!(writes(&state), before, "a report wrote the adapter: {line}");
+    for field in [
+        "driver rx next=0",
+        "tx next=1 clean=0",
+        "ulp_exit_failed=false",
+        "status=0x",
+        "rctl=0x",
+        "rdlen=4096",
+        "tdt=1",
+        " gprc=7",
+        " mpc=3",
+        "station=kept",
+        "pci_command=0x0406",
+    ] {
+        assert!(line.contains(field), "{field} missing from {line}");
+    }
+    let station = net.mac().0;
+    let named = alloc::format!("{:02x}:{:02x}:{:02x}", station[0], station[1], station[2]);
+    assert!(
+        !line.contains(&named),
+        "the report names the address: {line}"
+    );
+    // A station address the MAC lost is named as such.
+    state.borrow_mut().mac.insert(RAH, 0);
+    assert!(net.diagnostic().unwrap().contains("station=differs"));
+    net.shutdown().unwrap();
+    drop(net);
+    assert_eq!(released.load(Ordering::SeqCst), 1);
+}

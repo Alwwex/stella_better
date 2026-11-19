@@ -136,10 +136,15 @@ impl<R: Registers + nvm::Registers, D: Delay + Clone> Controller<R, D> {
         self.i219_family() == Some(i219::Family::Spt)
     }
     pub(super) fn spt_config_status(&mut self) -> Result<u16, Error> {
+        self.config_word(DESCRIPTOR_STATUS)
+    }
+    /// One live configuration-space word of this function, where the
+    /// cohort keeps its configuration space (LPT and later).
+    pub(super) fn config_word(&mut self, at: u16) -> Result<u16, Error> {
         self.phy.check_minimum()?;
         let read = self.config_read.ok_or(Error::Configuration)?;
         let io = self.phy.io.as_ref().expect("retained same-function owner");
-        let value = read(&mut *io.0.borrow_mut(), DESCRIPTOR_STATUS)?;
+        let value = read(&mut *io.0.borrow_mut(), at)?;
         if value == u16::MAX {
             return Err(Fault::Removed.into());
         }
